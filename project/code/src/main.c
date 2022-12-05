@@ -12,6 +12,12 @@
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
 
+// Contains all vulkan data.
+typedef struct wsVulkan {
+	VkInstance instance;
+} wsVulkan;
+wsVulkan vk;
+
 void wsVulkanInit();
 void wsRender();
 void wsVulkanStop();
@@ -50,8 +56,30 @@ void wsVulkanInit() {
 	printf("%i Vulkan extensions supported\n", extension_count);
 	
 	// Create Vulkan instance.
-	// VkInstance instance;
+	VkApplicationInfo app_info;
+	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	app_info.pApplicationName = "Westy Vulkan";
+	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	app_info.pEngineName = "No Engine";
+	app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+	app_info.apiVersion = VK_API_VERSION_1_0;
 	
+	VkInstanceCreateInfo create_info;
+	create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	create_info.pApplicationInfo = &app_info;
+	
+	// Get desired platform-specific global extensions from GLFW.
+	uint32_t glfw_extension_count = 0;
+	const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+	
+	create_info.enabledExtensionCount = glfw_extension_count;
+	create_info.ppEnabledExtensionNames = glfw_extensions;
+	create_info.enabledLayerCount = 0;
+	
+	VkResult result = vkCreateInstance(&create_info, NULL, &vk.instance);
+	if(result != VK_SUCCESS)
+		printf("ERROR: Vulkan instance creation failed!\n");
+	else printf("Vulkan instance created!\n");
 }
 
 void wsRender() {
@@ -59,5 +87,6 @@ void wsRender() {
 }
 
 void wsVulkanStop() {
-	
+	vkDestroyInstance(vk.instance, NULL);
+	printf("Vulkan instance destroyed!\n");
 }
