@@ -3,21 +3,22 @@
 #include"h/input.h"
 #include"h/window.h"
 
-typedef struct wsInput {
-	vec2 mouse_position;
-	vec2 mouse_position_prev;
-	float mouse_sensitivity;
-	float mouse_scroll;
-	bool mouse_first_move;
-	unsigned int windowID;
-} wsInput;
-wsInput input;
+// Keyboard data.
+int key_last;
+
+// Mouse data.
+vec2 mouse_position;
+vec2 mouse_position_prev;
+float mouse_sensitivity;
+float mouse_scroll;
+bool mouse_first_move;
+unsigned int windowID;
 
 void wsInputInit(unsigned int windowID, float mouse_sensitivity) {
-	input.windowID = windowID;
-    input.mouse_sensitivity = mouse_sensitivity;
-	input.mouse_scroll = 0.0f;
-	input.mouse_first_move = true;
+	windowID = windowID;
+    mouse_sensitivity = mouse_sensitivity;
+	mouse_scroll = 0.0f;
+	mouse_first_move = true;
 	
 	glfwSetKeyCallback(wsWindowGetPtr(windowID), wsInputKeyCallback);
 	glfwSetCursorPosCallback(wsWindowGetPtr(windowID), wsInputCursorPosCallback);
@@ -26,52 +27,53 @@ void wsInputInit(unsigned int windowID, float mouse_sensitivity) {
     printf("Input initialized: window ID %i, mouse sens %f\n", windowID, mouse_sensitivity);
 }
 
-bool wsInputGetHold(int key)	{ return (glfwGetKey(wsWindowGetPtr(input.windowID), key) == GLFW_PRESS); }
-bool wsInputGetPress(int key)	{ return (glfwGetKeyOnce(wsWindowGetPtr(input.windowID), key) == GLFW_PRESS); }
-bool wsInputGetRelease(int key)	{ return (glfwGetKey(wsWindowGetPtr(input.windowID), key) == GLFW_RELEASE); }
+int wsInputGetKeyLast()	{ return key_last; }
+bool wsInputGetKeyHold(int key)	{ return (glfwGetKey(wsWindowGetPtr(windowID), key) == GLFW_PRESS); }
+bool wsInputGetKeyPress(int key)	{ return (glfwGetKeyOnce(wsWindowGetPtr(windowID), key) == GLFW_PRESS); }
+bool wsInputGetKeyRelease(int key)	{ return (glfwGetKey(wsWindowGetPtr(windowID), key) == GLFW_RELEASE) && (key = key_last); }
 
-float wsInputGetMousePosX()		{ return input.mouse_position[0]; }
-float wsInputGetMousePosY()		{ return input.mouse_position[1]; }
-float wsInputGetMouseMoveX()	{ return input.mouse_position[0] - input.mouse_position_prev[0]; }
-float wsInputGetMouseMoveY()	{ return input.mouse_position[1] - input.mouse_position_prev[1]; }
-float wsInputGetMouseScroll()	{ return input.mouse_scroll; }
+float wsInputGetMousePosX()		{ return mouse_position[0]; }
+float wsInputGetMousePosY()		{ return mouse_position[1]; }
+float wsInputGetMouseMoveX()	{ return mouse_position[0] - mouse_position_prev[0]; }
+float wsInputGetMouseMoveY()	{ return mouse_position[1] - mouse_position_prev[1]; }
+float wsInputGetMouseScroll()	{ return mouse_scroll; }
 
 // Automatically calls glfwPollEvents().
 void wsInputUpdate() {
-	input.mouse_position_prev[0] = input.mouse_position[0];
-	input.mouse_position_prev[1] = input.mouse_position[1];
+	mouse_position_prev[0] = mouse_position[0];
+	mouse_position_prev[1] = mouse_position[1];
 	
 	glfwPollEvents();
 }
 
 void wsInputKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-	
+	key_last = key;
 }
 
 void wsInputCursorPosCallback(GLFWwindow* window, double posx, double posy) {
 	static float posx_prev;
 	static float posy_prev;
 	
-	if(input.mouse_first_move) {
+	if(mouse_first_move) {
 		posx_prev = posx;
 		posy_prev = posy;
-		input.mouse_first_move = false;
+		mouse_first_move = false;
 	}
 	
 	float offsetx = posx - posx_prev;
 	float offsety = posy_prev - posy;
 	posx_prev = posx;
 	posy_prev = posy;
-	offsetx *= input.mouse_sensitivity;
-	offsety *= input.mouse_sensitivity;
-	input.mouse_position[0] += offsetx;
-	input.mouse_position[1] += offsety;
+	offsetx *= mouse_sensitivity;
+	offsety *= mouse_sensitivity;
+	mouse_position[0] += offsetx;
+	mouse_position[1] += offsety;
 }
 
 void wsInputScrollCallback(GLFWwindow* window, double offsetx, double offsety) {
-	input.mouse_scroll -= (float)offsety;
-	if(input.mouse_scroll < -100.0f)
-		input.mouse_scroll = -100.0f;
-	else if(input.mouse_scroll > 100.0f)
-		input.mouse_scroll = 100.0f;
+	mouse_scroll -= (float)offsety;
+	if(mouse_scroll < -100.0f)
+		mouse_scroll = -100.0f;
+	else if(mouse_scroll > 100.0f)
+		mouse_scroll = 100.0f;
 }
