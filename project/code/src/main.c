@@ -1,7 +1,5 @@
 #include<stdio.h>
-#include"h/window.h"
-#include"h/input.h"
-#include"h/vulkan_interface.h"
+#include<stdbool.h>
 
 #define CGLM_FORCE_RADIANS
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -11,16 +9,24 @@
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
 
+#include"h/window.h"
+#include"h/input.h"
+#include"h/vulkan_interface.h"
+
+// Enables or disables debug mode.
+#define DEBUG true
+
 void wsRender();
 
 int main(int argc, char* argv[]) {
 	printf("---Begin---\n");
+	printf("Debug mode %s\n", DEBUG ? "on!" : "off!");
 	
 	unsigned int windowID = wsWindowInit(640, 480);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	
 	wsInputInit(windowID, 0.3f);
-	wsVulkanInit();
+	wsVulkanInit(DEBUG);
 	
 	printf("\n---Start Run---\n");
 	while(!glfwWindowShouldClose(window)) {

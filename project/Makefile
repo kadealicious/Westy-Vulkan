@@ -1,6 +1,6 @@
 CCFLAGS = -Wall -std=c99 -O2
 CC = gcc
-CCLIBS = -lmingw32 -lglfw3dll c:\Windows\System32\vulkan-1.dll --enable-stdcall-fixup -lfreetype6
+CCLIBS = -lmingw32 glfw3.dll c:\Windows\System32\vulkan-1.dll
 
 SRCDIR = code/src
 HEADDIR = code/src/h

@@ -30,7 +30,7 @@ unsigned int wsWindowInit(unsigned int window_width, unsigned int window_height)
 	
 	width[windowID] = window_width;
 	height[windowID] = window_height;
-	window_ptr[windowID] = glfwCreateWindow(wsWindowGetWidth(windowID), wsWindowGetHeight(windowID), "Vulkan Window!", NULL, NULL);
+	window_ptr[windowID] = glfwCreateWindow(wsWindowGetWidth(windowID), wsWindowGetHeight(windowID), "Westy Vulkan", NULL, NULL);
 	printf("Window %i created: res %ix%i\n", windowID, window_width, window_height);
 	
 	windowID++;
