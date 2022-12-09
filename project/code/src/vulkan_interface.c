@@ -30,22 +30,22 @@ void wsVulkanInit(bool debug) {
 	create_info.pApplicationInfo = &app_info;
 	
 	// Get list of required Vulkan extensions from GLFW.
-	uint32_t glfw_num_extensions = 0;
-	const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_num_extensions);
+	uint32_t num_required_extensions = 0;
+	const char** required_extensions = glfwGetRequiredInstanceExtensions(&num_required_extensions);
 	
-	create_info.enabledExtensionCount = glfw_num_extensions;
-	create_info.ppEnabledExtensionNames = glfw_extensions;
+	create_info.enabledExtensionCount = num_required_extensions;
+	create_info.ppEnabledExtensionNames = required_extensions;
 	
 	// Check GLFW-required Vulkan extensions.
-	printf("%i Vulkan extension(s) required by GLFW: ", glfw_num_extensions);
-	for(int i = 0; i < glfw_num_extensions; i++) {
-		printf("%s\t", glfw_extensions[i]);
+	printf("%i Vulkan extension(s) required by GLFW: ", num_required_extensions);
+	for(int i = 0; i < num_required_extensions; i++) {
+		printf("%s\t", required_extensions[i]);
 	}
 	printf("\n");
 	
 	// Enable debug validation layers if in debug mode.
 	create_info.enabledLayerCount = 0;
-	// WHY DOES THIS SECTION OF CODE CAUSE VKCREATEINSTANCE() TO FAIL BUT NOT CRASH
+	// Causes vkCreateInstance() to crash when validation layers are present.  Cool!
 	/*if(debug) {
 		if(wsVulkanEnableValidationLayers(&create_info)) {
 			printf("Required Vulkan validation layers are supported!\n");
@@ -53,31 +53,34 @@ void wsVulkanInit(bool debug) {
 	}*/
 	
 	// Check that we have all the required extensions for Vulkan.
-	uint32_t vk_num_extensions = 0;
-	vkEnumerateInstanceExtensionProperties(NULL, &vk_num_extensions, NULL);
-	VkExtensionProperties* vk_extensions = malloc(vk_num_extensions * sizeof(VkExtensionProperties));
-	vkEnumerateInstanceExtensionProperties(NULL, &vk_num_extensions, vk_extensions);
+	uint32_t num_available_extensions = 0;
+	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, NULL);
+	VkExtensionProperties* available_extensions = malloc(num_available_extensions * sizeof(VkExtensionProperties));
+	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, available_extensions);
 	
 	// WHY DOES THIS SECTION OF CODE CRASH THE PROGRAM ON VKCREATEINSTANCE()
-	/*for(int i = 0; i < glfw_num_extensions; i++) {
+	/*bool has_all_extensions = true;
+	for(int i = 0; i < num_required_extensions; i++) {
 		bool extension_found = false;
 		
-		for(int j = 0; j < vk_num_extensions; j++) {
-			if(strcmp(glfw_extensions[i], vk_extensions[j].extensionName) == 0) {
+		for(int j = 0; j < num_available_extensions; j++) {
+			if(strcmp(required_extensions[i], available_extensions[j].extensionName) == 0) {
 				extension_found = true;
 				break;
 			}
 		}
 		
 		if(!extension_found) {
-			printf("ERROR: 1 or more GLFW-required Vulkan extensions is NOT supported!\n");
+			printf("ERROR: GLFW-required Vulkan extension \"%s\" is NOT supported!\n", required_extensions[i]);
+			has_all_extensions = false;
 		}
 	}
-	printf("All GLFW-required Vulkan extensions are supported!\n");*/
+	if(has_all_extensions)
+		printf("All GLFW-required Vulkan extensions are supported!\n");*/
 	
-	/*printf("%i Vulkan extension(s) supported: ", vk_num_extensions);
-	for(int i = 0; i < vk_num_extensions; i++) {
-		printf("%s\t", vk_extensions[i].extensionName);
+	/*printf("%i Vulkan extension(s) supported: ", num_available_extensions);
+	for(int i = 0; i < num_available_extensions; i++) {
+		printf("%s\t", available_extensions[i].extensionName);
 	}
 	printf("\n");*/
 	
@@ -87,7 +90,7 @@ void wsVulkanInit(bool debug) {
 		printf("ERROR: Vulkan instance creation failed!\n");
 	else printf("Vulkan instance created!\n");
 	
-	free(vk_extensions);
+	free(available_extensions);
 }
 
 void wsVulkanStop() {
@@ -95,6 +98,7 @@ void wsVulkanStop() {
 	printf("Vulkan instance destroyed!\n");
 }
 
+// TODO: inline this inside of wsVulkanInit().
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	size_t num_required_layers = 1;
 	const char* required_layers[] = {"VK_LAYER_KHRONOS_validation"};
