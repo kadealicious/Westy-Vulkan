@@ -19,8 +19,7 @@
 void wsRender();
 
 int main(int argc, char* argv[]) {
-	printf("---Begin---\n");
-	printf("Debug mode %s\n", DEBUG ? "on!" : "off!");
+	printf("---Begin%s---\n", DEBUG ? " Debug" : "");
 	
 	// Create app window, then get its pointer for later use.
 	unsigned int windowID = wsWindowInit(640, 480);
@@ -30,7 +29,7 @@ int main(int argc, char* argv[]) {
 	wsVulkanInit(DEBUG);
 	
 	// Main loop.
-	printf("\n---Start Run---\n");
+	printf("\n---Start%s Run---\n", DEBUG ? " Debug" : "");
 	while(!glfwWindowShouldClose(window)) {
 		// Pre-logic-step.
 		// ws
@@ -46,13 +45,13 @@ int main(int argc, char* argv[]) {
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
 	}
-	printf("---Stop Run---\n\n");
+	printf("---Stop%s Run---\n\n", DEBUG ? " Debug" : "");
 	
 	// Program exit procedure.
 	wsVulkanStop();
 	wsWindowExit(windowID);
 	
-	printf("---End---\n");
+	printf("---End%s---\n", DEBUG ? " Debug" : "");
 	// getchar();
 	return 0;
 }

@@ -46,11 +46,11 @@ void wsVulkanInit(bool debug) {
 	// Enable debug validation layers if in debug mode.
 	create_info.enabledLayerCount = 0;
 	// Causes vkCreateInstance() to crash when validation layers are present.  Cool!
-	/*if(debug) {
+	if(debug) {
 		if(wsVulkanEnableValidationLayers(&create_info)) {
 			printf("Required Vulkan validation layers are supported!\n");
 		} else printf("ERROR: required Vulkan validation layers NOT supported!\n");
-	}*/
+	}
 	
 	// Check that we have all the required extensions for Vulkan.
 	uint32_t num_available_extensions = 0;
@@ -59,7 +59,7 @@ void wsVulkanInit(bool debug) {
 	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, available_extensions);
 	
 	// WHY DOES THIS SECTION OF CODE CRASH THE PROGRAM ON VKCREATEINSTANCE()
-	/*bool has_all_extensions = true;
+	bool has_all_extensions = true;
 	for(int i = 0; i < num_required_extensions; i++) {
 		bool extension_found = false;
 		
@@ -70,13 +70,14 @@ void wsVulkanInit(bool debug) {
 			}
 		}
 		
-		if(!extension_found) {
+		// Why does this crash?? No idea!!
+		/*if(!extension_found) {
 			printf("ERROR: GLFW-required Vulkan extension \"%s\" is NOT supported!\n", required_extensions[i]);
 			has_all_extensions = false;
-		}
+		}*/
 	}
 	if(has_all_extensions)
-		printf("All GLFW-required Vulkan extensions are supported!\n");*/
+		printf("All GLFW-required Vulkan extensions are supported!\n");
 	
 	/*printf("%i Vulkan extension(s) supported: ", num_available_extensions);
 	for(int i = 0; i < num_available_extensions; i++) {
@@ -98,10 +99,13 @@ void wsVulkanStop() {
 	printf("Vulkan instance destroyed!\n");
 }
 
-// TODO: inline this inside of wsVulkanInit().
+// For internal use only.
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
+	// Who knows if I need to free all this memory!?!?  Not me!
 	size_t num_required_layers = 1;
-	const char* required_layers[] = {"VK_LAYER_KHRONOS_validation"};
+	char** required_layers = malloc(num_required_layers * sizeof(char*));
+	required_layers[0] = malloc(sizeof("VK_LAYER_KHRONOS_validation") * sizeof(char) + 1);
+	required_layers[0] = "VK_LAYER_KHRONOS_validation\0";
 	
 	// Get available validation layers.
 	uint32_t num_available_layers;
@@ -126,7 +130,7 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	
 	// If we have all required layers available for use.
 	create_info->enabledLayerCount = num_required_layers;
-	create_info->ppEnabledLayerNames = &required_layers[0];
+	create_info->ppEnabledLayerNames = (const char**)required_layers;
 	printf("%i Vulkan validation layer(s) required: ", num_required_layers);
 	for(int i = 0; i < num_required_layers; i++) {
 		printf("%s\t", required_layers[i]);
