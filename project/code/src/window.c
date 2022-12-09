@@ -38,7 +38,7 @@ unsigned int wsWindowInit(unsigned int window_width, unsigned int window_height)
 }
 
 void wsWindowExit(unsigned int windowID) {
-	glfwDestroyWindow(wsWindowGetPtr(windowID));
+	glfwDestroyWindow(window_ptr[windowID]);
 	glfwTerminate();
 	
 	printf("Window %i destroyed!\n", windowID);

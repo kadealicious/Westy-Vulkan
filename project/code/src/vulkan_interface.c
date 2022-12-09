@@ -8,7 +8,7 @@
 
 #include"h/vulkan_interface.h"
 
-// Contains all vulkan data.
+// Main Vulkan instance.
 VkInstance instanceVK = NULL;
 
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
@@ -18,7 +18,7 @@ void wsVulkanInit(bool debug) {
 	// Set application info.
 	VkApplicationInfo app_info;
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	app_info.pApplicationName = "Westy Vulkan";
+	app_info.pApplicationName = "Westy";
 	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 	app_info.pEngineName = "Westy Vulkan";
 	app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -35,29 +35,6 @@ void wsVulkanInit(bool debug) {
 	
 	create_info.enabledExtensionCount = glfw_num_extensions;
 	create_info.ppEnabledExtensionNames = glfw_extensions;
-	create_info.enabledLayerCount = 0;
-	
-	// Enable debug validation layers if in debug mode.
-	if(debug) {
-		if(wsVulkanEnableValidationLayers(&create_info)) {
-			printf("Required Vulkan validation layers are supported!\n");
-		} else printf("ERROR: required Vulkan validation layers NOT supported!\n");
-	} else {
-		create_info.enabledLayerCount = 0;
-	}
-	
-	// Check that we have the required extensions for Vulkan.
-	uint32_t vk_num_extensions = 0;
-	vkEnumerateInstanceExtensionProperties(NULL, &vk_num_extensions, NULL);
-	VkExtensionProperties* vk_extensions = malloc(vk_num_extensions * sizeof(VkExtensionProperties));
-	vkEnumerateInstanceExtensionProperties(NULL, &vk_num_extensions, vk_extensions);
-	
-	printf("%i Vulkan extension(s) supported: ", vk_num_extensions);
-	for(int i = 0; i < vk_num_extensions; i++) {
-		printf("%s\t", vk_extensions[i].extensionName);
-	}
-	printf("\n");
-	free(vk_extensions);
 	
 	// Check GLFW-required Vulkan extensions.
 	printf("%i Vulkan extension(s) required by GLFW: ", glfw_num_extensions);
@@ -66,11 +43,51 @@ void wsVulkanInit(bool debug) {
 	}
 	printf("\n");
 	
+	// Enable debug validation layers if in debug mode.
+	create_info.enabledLayerCount = 0;
+	// WHY DOES THIS SECTION OF CODE CAUSE VKCREATEINSTANCE() TO FAIL BUT NOT CRASH
+	/*if(debug) {
+		if(wsVulkanEnableValidationLayers(&create_info)) {
+			printf("Required Vulkan validation layers are supported!\n");
+		} else printf("ERROR: required Vulkan validation layers NOT supported!\n");
+	}*/
+	
+	// Check that we have all the required extensions for Vulkan.
+	uint32_t vk_num_extensions = 0;
+	vkEnumerateInstanceExtensionProperties(NULL, &vk_num_extensions, NULL);
+	VkExtensionProperties* vk_extensions = malloc(vk_num_extensions * sizeof(VkExtensionProperties));
+	vkEnumerateInstanceExtensionProperties(NULL, &vk_num_extensions, vk_extensions);
+	
+	// WHY DOES THIS SECTION OF CODE CRASH THE PROGRAM ON VKCREATEINSTANCE()
+	/*for(int i = 0; i < glfw_num_extensions; i++) {
+		bool extension_found = false;
+		
+		for(int j = 0; j < vk_num_extensions; j++) {
+			if(strcmp(glfw_extensions[i], vk_extensions[j].extensionName) == 0) {
+				extension_found = true;
+				break;
+			}
+		}
+		
+		if(!extension_found) {
+			printf("ERROR: 1 or more GLFW-required Vulkan extensions is NOT supported!\n");
+		}
+	}
+	printf("All GLFW-required Vulkan extensions are supported!\n");*/
+	
+	/*printf("%i Vulkan extension(s) supported: ", vk_num_extensions);
+	for(int i = 0; i < vk_num_extensions; i++) {
+		printf("%s\t", vk_extensions[i].extensionName);
+	}
+	printf("\n");*/
+	
 	// Create Vulkan instance!
 	VkResult result = vkCreateInstance(&create_info, NULL, &instanceVK);
 	if(result != VK_SUCCESS)
 		printf("ERROR: Vulkan instance creation failed!\n");
 	else printf("Vulkan instance created!\n");
+	
+	free(vk_extensions);
 }
 
 void wsVulkanStop() {
@@ -101,11 +118,16 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 		if(!layer_found)
 			return false;
 	}
+	free(available_layers);
 	
 	// If we have all required layers available for use.
 	create_info->enabledLayerCount = num_required_layers;
-	create_info->ppEnabledLayerNames = (const char**)required_layers;
-	printf("%i Vulkan validation layer(s) required: %s\n", num_required_layers, required_layers[0]);
+	create_info->ppEnabledLayerNames = &required_layers[0];
+	printf("%i Vulkan validation layer(s) required: ", num_required_layers);
+	for(int i = 0; i < num_required_layers; i++) {
+		printf("%s\t", required_layers[i]);
+	}
+	printf("\n");
 	
 	return true;
 }

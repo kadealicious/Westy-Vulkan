@@ -22,12 +22,14 @@ int main(int argc, char* argv[]) {
 	printf("---Begin---\n");
 	printf("Debug mode %s\n", DEBUG ? "on!" : "off!");
 	
+	// Create app window, then get its pointer for later use.
 	unsigned int windowID = wsWindowInit(640, 480);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	
 	wsInputInit(windowID, 0.3f);
 	wsVulkanInit(DEBUG);
 	
+	// Main loop.
 	printf("\n---Start Run---\n");
 	while(!glfwWindowShouldClose(window)) {
 		// Pre-logic-step.
@@ -46,6 +48,7 @@ int main(int argc, char* argv[]) {
 	}
 	printf("---Stop Run---\n\n");
 	
+	// Program exit procedure.
 	wsVulkanStop();
 	wsWindowExit(windowID);
 	
