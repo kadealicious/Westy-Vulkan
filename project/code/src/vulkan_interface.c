@@ -12,7 +12,8 @@
 VkInstance instanceVK = NULL;
 
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
-bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info);
+bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info, bool debug);
+const char** wsAddDebugExtensions(const char** extensions, uint32_t* num_extensions);
 
 // Call after wsWindowInit().
 void wsVulkanInit(bool debug) {
@@ -31,16 +32,16 @@ void wsVulkanInit(bool debug) {
 	create_info.pApplicationInfo = &app_info;
 	
 	// Check that we have all the required extensions for Vulkan.
-	if(wsVulkanEnableGLFWRequiredExtensions(&create_info)) {
-		printf("All GLFW-required Vulkan extensions are supported!\n");
-	} else printf("ERROR: Not all GLFW-required Vulkan extensions are supported!\n");
+	if(wsVulkanEnableGLFWRequiredExtensions(&create_info, debug)) {
+		printf("\tAll GLFW-required Vulkan extensions are supported!\n");
+	} else printf("\tERROR: Not all GLFW-required Vulkan extensions are supported!\n");
 	
 	// Enable Vulkan validation layers if in debug mode.
 	create_info.enabledLayerCount = 0;
 	if(debug) {
 		if(wsVulkanEnableValidationLayers(&create_info)) {
-			printf("Required Vulkan validation layers are supported!\n");
-		} else printf("ERROR: required Vulkan validation layers NOT supported!\n");
+			printf("\tRequired Vulkan validation layers are supported!\n");
+		} else printf("\tERROR: required Vulkan validation layers NOT supported!\n");
 	}
 	
 	// Create Vulkan instance!
@@ -48,16 +49,33 @@ void wsVulkanInit(bool debug) {
 	if(result != VK_SUCCESS)
 		printf("ERROR: Vulkan instance creation failed!\n");
 	else printf("Vulkan instance created!\n");
-	
-	// Makes the whole thing go boo-boo!
-	// free(available_extensions);
 }
 
 // For internal use only.
-bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info) {
+// TODO: Make this void and instead just modify extensions internally through reference assignment.
+const char** wsAddDebugExtensions(const char** extensions, uint32_t* num_extensions) {
+	// Copy given extension list.
+	char** debug_extensions = malloc((*num_extensions + 1) * sizeof(char*));
+	for(int i = 0; i < *num_extensions; i++) {
+		debug_extensions[i] = (char*)extensions[i];
+	}
+	
+	// Append Debug utility extension to list.
+	debug_extensions[*num_extensions] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	
+	// Increment original number of extensions and return new extension list.
+	(*num_extensions)++;
+	return (const char**)debug_extensions;
+}
+
+// For internal use only.
+bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info, bool debug) {
 	// Get list of required Vulkan extensions from GLFW.
 	uint32_t num_required_extensions = 0;
 	const char** required_extensions = glfwGetRequiredInstanceExtensions(&num_required_extensions);
+	if(debug) {
+		required_extensions = wsAddDebugExtensions(required_extensions, &num_required_extensions);
+	}
 	
 	// Set correct fields in create_info.  Cannot create instance without this.
 	create_info->flags = 0;
@@ -71,12 +89,13 @@ bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info) {
 	}
 	printf("\n");
 	
-	// Check that required extensions are supported.
+	// Fetch required extensions & required extension count.
 	uint32_t num_available_extensions = 0;
 	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, NULL);
 	VkExtensionProperties* available_extensions = malloc(num_available_extensions * sizeof(VkExtensionProperties));
 	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, available_extensions);
 	
+	// Check that required extensions are supported.
 	bool has_all_extensions = true;
 	for(int i = 0; i < num_required_extensions; i++) {
 		bool extension_found = false;
@@ -89,17 +108,20 @@ bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info) {
 		}
 		
 		if(!extension_found) {
-			printf("ERROR: GLFW-required Vulkan extension \"%s\" is NOT supported!\n", required_extensions[i]);
+			printf("\tERROR: GLFW-required Vulkan extension \"%s\" is NOT supported!\n", required_extensions[i]);
 			has_all_extensions = false;
 		}
 	}
 	
 	// List all supported extensions.
-	/*printf("%i Vulkan extension(s) supported: ", num_available_extensions);
+	/*printf("\t%i Vulkan extension(s) supported: ", num_available_extensions);
 	for(int i = 0; i < num_available_extensions; i++) {
 		printf("%s\t", available_extensions[i].extensionName);
 	}
 	printf("\n");*/
+	
+	// Makes the whole thing go boo-boo!  Sometimes!
+	free(available_extensions);
 	
 	return has_all_extensions;
 }
