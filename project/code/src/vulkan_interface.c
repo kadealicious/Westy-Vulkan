@@ -12,6 +12,7 @@
 VkInstance instanceVK = NULL;
 
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
+bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info);
 
 // Call after wsWindowInit().
 void wsVulkanInit(bool debug) {
@@ -29,36 +30,53 @@ void wsVulkanInit(bool debug) {
 	create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	create_info.pApplicationInfo = &app_info;
 	
-	// Get list of required Vulkan extensions from GLFW.
-	uint32_t num_required_extensions = 0;
-	const char** required_extensions = glfwGetRequiredInstanceExtensions(&num_required_extensions);
+	// Check that we have all the required extensions for Vulkan.
+	if(wsVulkanEnableGLFWRequiredExtensions(&create_info)) {
+		printf("All GLFW-required Vulkan extensions are supported!\n");
+	} else printf("ERROR: Not all GLFW-required Vulkan extensions are supported!\n");
 	
-	create_info.enabledExtensionCount = num_required_extensions;
-	create_info.ppEnabledExtensionNames = required_extensions;
-	
-	// Check GLFW-required Vulkan extensions.
-	printf("%i Vulkan extension(s) required by GLFW: ", num_required_extensions);
-	for(int i = 0; i < num_required_extensions; i++) {
-		printf("%s\t", required_extensions[i]);
-	}
-	printf("\n");
-	
-	// Enable debug validation layers if in debug mode.
+	// Enable Vulkan validation layers if in debug mode.
 	create_info.enabledLayerCount = 0;
-	// Causes vkCreateInstance() to crash when validation layers are present.  Cool!
 	if(debug) {
 		if(wsVulkanEnableValidationLayers(&create_info)) {
 			printf("Required Vulkan validation layers are supported!\n");
 		} else printf("ERROR: required Vulkan validation layers NOT supported!\n");
 	}
 	
-	// Check that we have all the required extensions for Vulkan.
+	// Create Vulkan instance!
+	VkResult result = vkCreateInstance(&create_info, NULL, &instanceVK);
+	if(result != VK_SUCCESS)
+		printf("ERROR: Vulkan instance creation failed!\n");
+	else printf("Vulkan instance created!\n");
+	
+	// Makes the whole thing go boo-boo!
+	// free(available_extensions);
+}
+
+// For internal use only.
+bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info) {
+	// Get list of required Vulkan extensions from GLFW.
+	uint32_t num_required_extensions = 0;
+	const char** required_extensions = glfwGetRequiredInstanceExtensions(&num_required_extensions);
+	
+	// Set correct fields in create_info.  Cannot create instance without this.
+	create_info->flags = 0;
+	create_info->enabledExtensionCount = num_required_extensions;
+	create_info->ppEnabledExtensionNames = required_extensions;
+	
+	// List all required extensions.
+	printf("%i Vulkan extension(s) required by GLFW: ", num_required_extensions);
+	for(int i = 0; i < num_required_extensions; i++) {
+		printf("%s\t", required_extensions[i]);
+	}
+	printf("\n");
+	
+	// Check that required extensions are supported.
 	uint32_t num_available_extensions = 0;
 	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, NULL);
 	VkExtensionProperties* available_extensions = malloc(num_available_extensions * sizeof(VkExtensionProperties));
 	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, available_extensions);
 	
-	// WHY DOES THIS SECTION OF CODE CRASH THE PROGRAM ON VKCREATEINSTANCE()
 	bool has_all_extensions = true;
 	for(int i = 0; i < num_required_extensions; i++) {
 		bool extension_found = false;
@@ -70,33 +88,20 @@ void wsVulkanInit(bool debug) {
 			}
 		}
 		
-		// Why does this crash?? No idea!!
-		/*if(!extension_found) {
+		if(!extension_found) {
 			printf("ERROR: GLFW-required Vulkan extension \"%s\" is NOT supported!\n", required_extensions[i]);
 			has_all_extensions = false;
-		}*/
+		}
 	}
-	if(has_all_extensions)
-		printf("All GLFW-required Vulkan extensions are supported!\n");
 	
+	// List all supported extensions.
 	/*printf("%i Vulkan extension(s) supported: ", num_available_extensions);
 	for(int i = 0; i < num_available_extensions; i++) {
 		printf("%s\t", available_extensions[i].extensionName);
 	}
 	printf("\n");*/
 	
-	// Create Vulkan instance!
-	VkResult result = vkCreateInstance(&create_info, NULL, &instanceVK);
-	if(result != VK_SUCCESS)
-		printf("ERROR: Vulkan instance creation failed!\n");
-	else printf("Vulkan instance created!\n");
-	
-	free(available_extensions);
-}
-
-void wsVulkanStop() {
-	vkDestroyInstance(instanceVK, NULL);
-	printf("Vulkan instance destroyed!\n");
+	return has_all_extensions;
 }
 
 // For internal use only.
@@ -104,7 +109,7 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	// Who knows if I need to free all this memory!?!?  Not me!
 	size_t num_required_layers = 1;
 	char** required_layers = malloc(num_required_layers * sizeof(char*));
-	required_layers[0] = malloc(sizeof("VK_LAYER_KHRONOS_validation") * sizeof(char) + 1);
+	required_layers[0] = malloc(sizeof("VK_LAYER_KHRONOS_validation") * sizeof(char));
 	required_layers[0] = "VK_LAYER_KHRONOS_validation\0";
 	
 	// Get available validation layers.
@@ -138,4 +143,9 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	printf("\n");
 	
 	return true;
+}
+
+void wsVulkanStop() {
+	vkDestroyInstance(instanceVK, NULL);
+	printf("Vulkan instance destroyed!\n");
 }
