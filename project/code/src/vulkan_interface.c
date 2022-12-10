@@ -122,6 +122,7 @@ bool wsVulkanEnableGLFWRequiredExtensions(VkInstanceCreateInfo* create_info, boo
 	
 	// Makes the whole thing go boo-boo!  Sometimes!
 	free(available_extensions);
+	free(required_extensions);
 	
 	return has_all_extensions;
 }
