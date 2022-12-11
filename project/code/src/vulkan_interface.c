@@ -1,6 +1,5 @@
 #include<stdio.h>
 #include<stdlib.h>
-#include<stdbool.h>
 #include<string.h>
 
 #include <vulkan/vulkan.h>
@@ -8,23 +7,40 @@
 
 #include"h/vulkan_interface.h"
 
-#define DEBUG true
+// General Vulkan interfacing functions.
+void wsVulkanInit(const bool debug_mode);
+void wsVulkanStop();
+bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
+bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
+void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
 
+// Debug-messenger-related functions.
+void wsVulkanInitDebugMessenger();
+void wsVulkanStopDebugMessenger();
+void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoEXT* create_info);
+
+// Vulkan proxy functions.
+VkResult wsVulkanCreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* create_info, 
+	const VkAllocationCallbacks* allocator, 
+	VkDebugUtilsMessengerEXT* debug_messenger);
+void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger, const VkAllocationCallbacks* allocator);
+static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msg_severity, 
+	VkDebugUtilsMessageTypeFlagsEXT msg_type, 
+	const VkDebugUtilsMessengerCallbackDataEXT* callback_data, 
+	void* user_data);
+
+// Debug mode.
+bool debug;
 // Main Vulkan instance.
 VkInstance instanceVK;
 // Main debug messenger.
 VkDebugUtilsMessengerEXT debug_msgrVK;
 
-void wsVulkanInitDebugMessenger();
-void wsVulkanStopDebugMessenger();
-void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoEXT* create_info);
-
-bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
-bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
-void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
 
 // Call after wsWindowInit().
-void wsVulkanInit() {
+void wsVulkanInit(const bool debug_mode) {
+	debug = debug_mode;
+	
 	// Set application info.
 	VkApplicationInfo app_info;
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -48,10 +64,9 @@ void wsVulkanInit() {
 	// Enable Vulkan validation layers if in debug mode.
 	create_info.enabledLayerCount = 0;
 	create_info.pNext = NULL;
-	
-	// If debug, do debug things.
+	// If debug, do debug things.  If debug, we will need this struct in a moment for scope-related reasons in vkCreateInstance().
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info;
-	if(DEBUG) {
+	if(debug) {
 		if(wsVulkanEnableValidationLayers(&create_info)) {
 			printf("\tRequired Vulkan validation layers are supported!\n");
 		} else printf("\tERROR: required Vulkan validation layers NOT supported!\n");
@@ -64,12 +79,37 @@ void wsVulkanInit() {
 	// Create Vulkan instance!
 	VkResult result = vkCreateInstance(&create_info, NULL, &instanceVK);
 	if(result != VK_SUCCESS)
-		printf("ERROR: Vulkan instance creation failed!\n");
+		printf("ERROR: Vulkan instance creation failed with result code %i!\n", result);
 	else printf("Vulkan instance created!\n");
 	
-	if(DEBUG) {
+	if(debug) {
 		wsVulkanInitDebugMessenger();
 	}
+}
+
+void wsVulkanStop() {
+	if(debug) {
+		wsVulkanStopDebugMessenger();
+		printf("Vulkan debug messenger destroyed!\n");
+	}
+	
+	vkDestroyInstance(instanceVK, NULL);
+	printf("Vulkan instance destroyed!\n");
+}
+
+void wsVulkanInitDebugMessenger() {
+	// Populate creation info for debug messenger.
+	VkDebugUtilsMessengerCreateInfoEXT create_info;
+	wsVulkanPopulateDebugMessengerCreationInfo(&create_info);
+	
+	// Create debug messenger!
+	if(wsVulkanCreateDebugUtilsMessengerEXT(instanceVK, &create_info, NULL, &debug_msgrVK) == VK_SUCCESS) {
+		printf("Vulkan debug messenger created!\n");
+	} else printf("ERROR: Vulkan debug messenger creation failed!\n");
+}
+
+void wsVulkanStopDebugMessenger() {
+	wsVulkanDestroyDebugUtilsMessengerEXT(instanceVK, debug_msgrVK, NULL);
 }
 
 // Create debug messenger.
@@ -85,6 +125,7 @@ VkResult wsVulkanCreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebug
     }
 }
 
+// Destroy debug messenger.
 void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger, const VkAllocationCallbacks* allocator) {
     PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != NULL) {
@@ -110,11 +151,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 	return VK_FALSE;
 }
 
+// Populate debug messenger creation info; used for debugging vkCreateInstance().
 void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoEXT* create_info) {
 	// Specify creation info for debug messenger.
 	create_info->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	// Specify which messages the debug callback function should be called for.
-	create_info->messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
+	create_info->messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	// Specify which messages the debug callback function should be notified about.
 	create_info->messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | 
@@ -122,19 +165,9 @@ void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoE
 		VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	// Debug callback function pointer.
 	create_info->pfnUserCallback = &wsVulkanDebugCallback;
+	// Unnecessary, but will get warning without these two assignments.
 	create_info->pUserData = NULL;
 	create_info->flags = 0;
-}
-
-void wsVulkanInitDebugMessenger() {
-	// Populate creation info for debug messenger.
-	VkDebugUtilsMessengerCreateInfoEXT create_info;
-	wsVulkanPopulateDebugMessengerCreationInfo(&create_info);
-	
-	// Create debug messenger!
-	if(wsVulkanCreateDebugUtilsMessengerEXT(instanceVK, &create_info, NULL, &debug_msgrVK) == VK_SUCCESS) {
-		printf("Vulkan debug messenger created!\n");
-	} else printf("ERROR: Vulkan debug messenger creation failed!\n");
 }
 
 // For internal use only.
@@ -158,7 +191,7 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 	// Get list of required Vulkan extensions from GLFW.
 	uint32_t num_required_extensions = 0;
 	const char** required_extensions = glfwGetRequiredInstanceExtensions(&num_required_extensions);
-	if(DEBUG) {
+	if(debug) {
 		wsAddDebugExtensions(&required_extensions, &num_required_extensions);
 	}
 	
@@ -205,9 +238,9 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 	}
 	printf("\n");*/
 	
-	// Makes the whole thing go boo-boo!  Sometimes!
 	free(available_extensions);
-	free(required_extensions);
+	// NEVER FREE REQUIRED_EXTENSIONS!  GLFW guarantees pointer validity for lifetime of program.  Breaks non-debug mode.  Oopsie daisies!
+	// free(required_extensions);
 	
 	return has_all_extensions;
 }
@@ -251,18 +284,4 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	printf("\n");
 	
 	return true;
-}
-
-void wsVulkanStop() {
-	if(DEBUG) {
-		wsVulkanStopDebugMessenger();
-		printf("Vulkan debug messenger destroyed!\n");
-	}
-	
-	vkDestroyInstance(instanceVK, NULL);
-	printf("Vulkan instance destroyed!\n");
-}
-
-void wsVulkanStopDebugMessenger() {
-	wsVulkanDestroyDebugUtilsMessengerEXT(instanceVK, debug_msgrVK, NULL);
 }
