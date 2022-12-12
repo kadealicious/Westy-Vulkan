@@ -7,12 +7,24 @@
 
 #include"h/vulkan_interface.h"
 
+#define MAX_QUEUE_FAMILIES 10
+
 // General Vulkan interfacing functions.
 void wsVulkanInit(const bool debug_mode);
 void wsVulkanStop();
+
+// Vulkan initialization functions.
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
 bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
 void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
+bool wsVulkanPickPhysicalDevice();
+int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU);
+
+typedef struct wsVulkanQueueFamilyIndices {
+	// Optional?  I think??
+	uint32_t graphics_family;
+} wsVulkanQueueFamilyIndices;
+wsVulkanQueueFamilyIndices wsVulkanFindQueueFamilies(VkPhysicalDevice* GPU);
 
 // Debug-messenger-related functions.
 void wsVulkanInitDebugMessenger();
@@ -33,6 +45,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 bool debug;
 // Main Vulkan instance.
 VkInstance instanceVK;
+// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
+VkPhysicalDevice gpuVK = NULL;
 // Main debug messenger.
 VkDebugUtilsMessengerEXT debug_msgrVK;
 
@@ -82,9 +96,14 @@ void wsVulkanInit(const bool debug_mode) {
 		printf("ERROR: Vulkan instance creation failed with result code %i!\n", result);
 	else printf("Vulkan instance created!\n");
 	
+	// Self-explanatory.  Used for receiving and sending debug messages to stdout.
 	if(debug) {
 		wsVulkanInitDebugMessenger();
 	}
+	
+	if(wsVulkanPickPhysicalDevice()) {
+		printf("Found GPU with proper Vulkan support!\n");
+	} else printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
 }
 
 void wsVulkanStop() {
@@ -95,6 +114,81 @@ void wsVulkanStop() {
 	
 	vkDestroyInstance(instanceVK, NULL);
 	printf("Vulkan instance destroyed!\n");
+}
+
+// Finds queue families and stores them in a struct of type wsVulkanQueueFamilyIndices.
+wsVulkanQueueFamilyIndices wsVulkanFindQueueFamilies(VkPhysicalDevice* GPU) {
+	wsVulkanQueueFamilyIndices indices;
+	
+	uint32_t num_queue_families = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(*GPU, &num_queue_families, NULL);
+	VkQueueFamilyProperties* queue_families = malloc(num_queue_families * sizeof(VkQueueFamilyProperties));
+	vkGetPhysicalDeviceQueueFamilyProperties(*GPU, &num_queue_families, queue_families);
+	
+	indices.graphics_family = NULL;
+	for(int i = 0; i < num_queue_families; i++) {
+		VkQueueFamilyProperties queue_family = queue_families[i];
+		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+			indices.graphics_family = i;
+			break;
+		}
+	}
+	
+	return indices;
+}
+
+// Pick an appropriate physical device for Vulkan to utilize.  Returns whether or not one was found.
+bool wsVulkanPickPhysicalDevice() {
+	// Get list of physical devices and store in GPUs[].
+	uint32_t num_GPUs = 0;
+	vkEnumeratePhysicalDevices(instanceVK, &num_GPUs, NULL);
+	if(num_GPUs <= 0) {
+		return false;
+	}
+	VkPhysicalDevice* GPUs = malloc(num_GPUs * sizeof(VkPhysicalDevice));
+	vkEnumeratePhysicalDevices(instanceVK, &num_GPUs, GPUs);
+	
+	// Pick most suitable GPU.
+	int max_score = -1;
+	int ndx_GPU = -1;
+	for(int i = 0; i < num_GPUs; i++) {
+		int current_score = wsVulkanRatePhysicalDevice(&(GPUs[i]));
+		if(current_score > max_score) {
+			max_score = current_score;
+			ndx_GPU = i;
+		}
+	}
+	
+	// If the max GPU score is not able to function with the program, then we've got a problemo
+	if(max_score != -1) {
+		gpuVK = GPUs[ndx_GPU];
+		return true;
+	} else return false;
+	
+	// Don't free GPU list so that we can allow user to swap GPUs in settings later.
+}
+
+// Verify if physical device is suitable for our use-cases and score it based on functionality.
+int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU) {
+	int score = 0;
+	
+	VkPhysicalDeviceProperties device_properties;
+	VkPhysicalDeviceFeatures device_features;
+	vkGetPhysicalDeviceProperties(*GPU, &device_properties);
+	vkGetPhysicalDeviceFeatures(*GPU, &device_features);
+	
+	// Program cannot function without geometry shaders!
+	if(!device_features.geometryShader)
+		return -1;
+	// These are optional, but it's much preferred if we have them.
+	wsVulkanQueueFamilyIndices indices = wsVulkanFindQueueFamilies(GPU);
+	if(indices.graphics_family == NULL)
+		return -1;
+	
+	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
+	score += device_properties.limits.maxImageDimension2D;
+	
+	return score;
 }
 
 void wsVulkanInitDebugMessenger() {
