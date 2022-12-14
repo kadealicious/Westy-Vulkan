@@ -6,15 +6,18 @@
 #include<CGLM/vec4.h>
 #include<CGLM/mat4.h>
 
+#define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
-#include<GLFW/glfw3.h>
+#include <GLFW/glfw3.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
 
 #include"h/window.h"
 #include"h/input.h"
 #include"h/vulkan_interface.h"
 
-// Enables or disables debug mode.
-#define DEBUG true
+// Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
+#define DEBUG 1
 
 void wsGLFWErrorCallback(int code, const char* description);
 
@@ -22,18 +25,19 @@ int main(int argc, char* argv[]) {
 	printf("---Begin%s---\n", DEBUG ? " Debug" : "");
 	
 	// Initialize GLFW and related components.
-	unsigned int windowID = wsWindowInit(640, 480);
+	uint8_t windowID = wsWindowInit(640, 480);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	glfwSetErrorCallback(&wsGLFWErrorCallback);
 	wsInputInit(windowID, 0.3f);
 	
 	// Initialize Vulkan.
 	VkInstance instanceVK;	// Main Vulkan instance.
+	VkSurfaceKHR surfaceVK;	// Window surface for drawing.
 	VkPhysicalDevice gpuVK = NULL;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
 	VkDevice logical_gpuVK = NULL;	// Primary logical device used to interface with the physical device.
 	VkDebugUtilsMessengerEXT debug_msgrVK;	// Main debug messenger.
 	wsVulkanSetDebug(DEBUG);
-	wsVulkanInit(&instanceVK, &gpuVK, &logical_gpuVK, &debug_msgrVK);
+	wsVulkanInit(&instanceVK, &surfaceVK, windowID, &gpuVK, &logical_gpuVK, &debug_msgrVK);
 	
 	// Main loop.
 	printf("\n---Start%s Run---\n", DEBUG ? " Debug" : "");

@@ -5,11 +5,12 @@
 
 #include<GLFW/glfw3.h>
 
-unsigned int wsWindowGetWidth(unsigned int windowID);
-unsigned int wsWindowGetHeight(unsigned int windowID);
-GLFWwindow* wsWindowGetPtr(unsigned int windowID);
+uint16_t wsWindowGetWidth(uint8_t windowID);
+uint16_t wsWindowGetHeight(uint8_t windowID);
+GLFWwindow* wsWindowGetPtr(uint8_t windowID);
+int8_t wsWindowGetID(GLFWwindow* window);	// Returns -1 if window not found.
 
-unsigned int wsWindowInit(unsigned int window_width, unsigned int window_height);
-void wsWindowExit(unsigned int windowID);
+uint8_t wsWindowInit(uint16_t window_width, uint16_t window_height);
+void wsWindowExit(uint8_t windowID);
 
 #endif

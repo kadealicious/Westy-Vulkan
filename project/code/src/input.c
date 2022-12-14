@@ -12,9 +12,9 @@ vec2 mouse_position_prev;
 float mouse_sensitivity;
 float mouse_scroll;
 bool mouse_first_move;
-unsigned int windowID;
+uint8_t windowID;
 
-void wsInputInit(unsigned int windowID, float mouse_sensitivity) {
+void wsInputInit(uint8_t windowID, float mouse_sensitivity) {
 	windowID = windowID;
     mouse_sensitivity = mouse_sensitivity;
 	mouse_scroll = 0.0f;

@@ -11,7 +11,7 @@ char key_once[GLFW_KEY_LAST + 1];
      (key_once[key] ? false : (key_once[key] = true)) :   \
      (key_once[key] = false))
 
-void wsInputInit(unsigned int windowID, float mouse_sensitivity);
+void wsInputInit(uint8_t windowID, float mouse_sensitivity);
 void wsInputUpdate();
 
 int wsInputGetKeyLast();
