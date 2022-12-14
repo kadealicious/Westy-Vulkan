@@ -18,7 +18,8 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
 void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
 bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical_device);
 int wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device);
-bool wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue);
+bool wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, 
+	uint32_t num_validation_layers, const char* const* validation_layers);
 
 // Queue family management.
 typedef struct wsVulkanQueueFamilyIndices {
@@ -51,9 +52,6 @@ void wsVulkanSetDebug(const bool debug_mode) { debug = debug_mode; }
 // Call after wsWindowInit().
 void wsVulkanInit(VkInstance* instance, VkPhysicalDevice* physical_device, VkDevice* logical_device, 
 	VkDebugUtilsMessengerEXT* debug_messenger) {
-	
-	// Graphics queue interface.
-	VkQueue graphics_queue;
 	
 	// Set application info.
 	VkApplicationInfo app_info;
@@ -101,14 +99,16 @@ void wsVulkanInit(VkInstance* instance, VkPhysicalDevice* physical_device, VkDev
 		wsVulkanInitDebugMessenger(instance, debug_messenger);
 	}
 	
+	// Find best-suited physical device.
 	if(wsVulkanPickPhysicalDevice(instance, physical_device)) {
 		printf("Found GPU with proper Vulkan support!\n");
 	} else printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
 	
+	// Create logical device for interfacing with physical device.
+	VkQueue graphics_queue;
+	
 	// Currently crashes program.
-	/*if(wsVulkanCreateLogicalDevice(physical_device, logical_device, graphics_queue)) {
-		printf("Vulkan logical device created!\n");
-	} else printf("ERROR: Vulkan logical device creation failed!\n");*/
+	wsVulkanCreateLogicalDevice(physical_device, logical_device, &graphics_queue, create_info.enabledLayerCount, create_info.ppEnabledLayerNames);
 }
 
 void wsVulkanStop(VkInstance* instance, VkDevice* logical_device, VkDebugUtilsMessengerEXT* debug_messenger) {
@@ -123,13 +123,15 @@ void wsVulkanStop(VkInstance* instance, VkDevice* logical_device, VkDebugUtilsMe
 }
 
 // Creates a logical device to interface with the physical one.
-bool wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue) {
+bool wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, 
+	uint32_t num_validation_layers, const char* const* validation_layers) {
+		
 	// Get required queue family indices.
 	wsVulkanQueueFamilyIndices indices;
 	wsVulkanFindQueueFamilies(&indices, physical_device);
 	
 	// Specify creation info for logical_gpuVK's queue families.
-	VkDeviceQueueCreateInfo queue_create_info;
+	VkDeviceQueueCreateInfo queue_create_info = {};
 	queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	queue_create_info.queueFamilyIndex = indices.graphics_family;
 	queue_create_info.queueCount = 1;
@@ -139,23 +141,23 @@ bool wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* lo
 	queue_create_info.pQueuePriorities = &queue_priority;
 	
 	// Used to specify device features that will be used.
-	VkPhysicalDeviceFeatures device_features;
+	VkPhysicalDeviceFeatures device_features = {};
 	
 	// Specify creation info for logical_gpuVK.
-	VkDeviceCreateInfo create_info;
+	VkDeviceCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	create_info.pQueueCreateInfos = &queue_create_info;
 	create_info.queueCreateInfoCount = 1;
 	create_info.pEnabledFeatures = &device_features;
+	create_info.pNext = NULL;
 	
 	create_info.enabledExtensionCount = 0;
-	if(!debug)
-		create_info.enabledLayerCount = 0;
-	// These are technically deprecated, but we set them anyways to stay fairly backwards-compatible.  Or, we don't!
-	/*if(debug) {
-		create_info.enabledLayerCount = (uint32_t)num_required_layers;
-		create_info.ppEnabledLayerNames = required_layers;
-	} else create_info.enabledLayerCount = 0;*/
+	create_info.ppEnabledExtensionNames = NULL;
+	// Device-specific validation layers are deprecated for modern API versions, but required for older versions.
+	if(debug) {
+		create_info.enabledLayerCount = (uint32_t)num_validation_layers;
+		create_info.ppEnabledLayerNames = validation_layers;
+	} else create_info.enabledLayerCount = 0;
 	
 	VkResult result = vkCreateDevice(*physical_device, &create_info, NULL, logical_device);
 	if(result != VK_SUCCESS) {
@@ -313,7 +315,7 @@ void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoE
 	// Specify creation info for debug messenger.
 	create_info->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	// Specify which messages the debug callback function should be called for.
-	create_info->messageSeverity = // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+	create_info->messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	// Specify which messages the debug callback function should be notified about.

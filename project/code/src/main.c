@@ -16,16 +16,18 @@
 // Enables or disables debug mode.
 #define DEBUG true
 
+void wsGLFWErrorCallback(int code, const char* description);
+
 int main(int argc, char* argv[]) {
 	printf("---Begin%s---\n", DEBUG ? " Debug" : "");
 	
-	// Create app window, then get its pointer for later use.
+	// Initialize GLFW and related components.
 	unsigned int windowID = wsWindowInit(640, 480);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
-	
+	glfwSetErrorCallback(&wsGLFWErrorCallback);
 	wsInputInit(windowID, 0.3f);
 	
-	// Initialize Vulkan
+	// Initialize Vulkan.
 	VkInstance instanceVK;	// Main Vulkan instance.
 	VkPhysicalDevice gpuVK = NULL;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
 	VkDevice logical_gpuVK = NULL;	// Primary logical device used to interface with the physical device.
@@ -62,3 +64,6 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
+void wsGLFWErrorCallback(int code, const char* description) {
+	printf("ERROR: GLFW code %i: %s\n", code, description);
+}
