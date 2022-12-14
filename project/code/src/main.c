@@ -14,7 +14,7 @@
 #include"h/vulkan_interface.h"
 
 // Enables or disables debug mode.  Broken!?
-#define DEBUG false
+#define DEBUG true
 
 void wsRender();
 

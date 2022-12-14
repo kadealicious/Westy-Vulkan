@@ -20,11 +20,12 @@ void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
 bool wsVulkanPickPhysicalDevice();
 int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU);
 
+// TODO: Make this not invalidate graphics card verification.
 typedef struct wsVulkanQueueFamilyIndices {
-	// Optional?  I think??
 	uint32_t graphics_family;
+	bool has_graphics_family;
 } wsVulkanQueueFamilyIndices;
-wsVulkanQueueFamilyIndices wsVulkanFindQueueFamilies(VkPhysicalDevice* GPU);
+void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDevice* GPU);
 
 // Debug-messenger-related functions.
 void wsVulkanInitDebugMessenger();
@@ -116,25 +117,23 @@ void wsVulkanStop() {
 	printf("Vulkan instance destroyed!\n");
 }
 
-// Finds queue families and stores them in a struct of type wsVulkanQueueFamilyIndices.
-wsVulkanQueueFamilyIndices wsVulkanFindQueueFamilies(VkPhysicalDevice* GPU) {
-	wsVulkanQueueFamilyIndices indices;
-	
+// Finds queue families and stores their indices in *indices.
+void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDevice* GPU) {
 	uint32_t num_queue_families = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(*GPU, &num_queue_families, NULL);
 	VkQueueFamilyProperties* queue_families = malloc(num_queue_families * sizeof(VkQueueFamilyProperties));
 	vkGetPhysicalDeviceQueueFamilyProperties(*GPU, &num_queue_families, queue_families);
 	
-	indices.graphics_family = NULL;
+	indices->has_graphics_family = false;
 	for(int i = 0; i < num_queue_families; i++) {
 		VkQueueFamilyProperties queue_family = queue_families[i];
+		// Check for graphics queue family with proper support.
 		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-			indices.graphics_family = i;
-			break;
+			indices->graphics_family = i;
+			indices->has_graphics_family = true;
+			return;
 		}
 	}
-	
-	return indices;
 }
 
 // Pick an appropriate physical device for Vulkan to utilize.  Returns whether or not one was found.
@@ -180,9 +179,11 @@ int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU) {
 	// Program cannot function without geometry shaders!
 	if(!device_features.geometryShader)
 		return -1;
-	// These are optional, but it's much preferred if we have them.
-	wsVulkanQueueFamilyIndices indices = wsVulkanFindQueueFamilies(GPU);
-	if(indices.graphics_family == NULL)
+	
+	// Program cannot function without certain queue families.
+	wsVulkanQueueFamilyIndices indices;
+	wsVulkanFindQueueFamilies(&indices, GPU);
+	if(!indices.has_graphics_family)
 		return -1;
 	
 	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
