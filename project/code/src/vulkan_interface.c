@@ -19,13 +19,15 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
 void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
 bool wsVulkanPickPhysicalDevice();
 int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU);
+bool wsVulkanCreateLogicalDevice();
 
-// TODO: Make this not invalidate graphics card verification.
+// Queue family management.
 typedef struct wsVulkanQueueFamilyIndices {
 	uint32_t graphics_family;
 	bool has_graphics_family;
 } wsVulkanQueueFamilyIndices;
 void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDevice* GPU);
+bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices);
 
 // Debug-messenger-related functions.
 void wsVulkanInitDebugMessenger();
@@ -44,17 +46,26 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 
 // Debug mode.
 bool debug;
-// Main Vulkan instance.
-VkInstance instanceVK;
-// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
-VkPhysicalDevice gpuVK = NULL;
-// Main debug messenger.
-VkDebugUtilsMessengerEXT debug_msgrVK;
 
 
 // Call after wsWindowInit().
 void wsVulkanInit(const bool debug_mode) {
 	debug = debug_mode;
+	
+	
+	// Main Vulkan instance.
+	VkInstance instanceVK;
+	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
+	VkPhysicalDevice gpuVK = NULL;
+	// Primary logical device used to interface with the physical device.
+	VkDevice logical_gpuVK;
+
+	// Graphics queue interface.
+	VkQueue graphics_queueVK;
+
+	// Main debug messenger.
+	VkDebugUtilsMessengerEXT debug_msgrVK;
+	
 	
 	// Set application info.
 	VkApplicationInfo app_info;
@@ -105,6 +116,11 @@ void wsVulkanInit(const bool debug_mode) {
 	if(wsVulkanPickPhysicalDevice()) {
 		printf("Found GPU with proper Vulkan support!\n");
 	} else printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
+	
+	// Currently crashes program.
+	/*if(wsVulkanCreateLogicalDevice()) {
+		printf("Vulkan logical device created!\n");
+	} else printf("ERROR: Vulkan logical device creation failed!\n");*/
 }
 
 void wsVulkanStop() {
@@ -113,8 +129,63 @@ void wsVulkanStop() {
 		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
+	vkDestroyDevice(logical_gpuVK, NULL);
 	vkDestroyInstance(instanceVK, NULL);
 	printf("Vulkan instance destroyed!\n");
+}
+
+// Creates a logical device to interface with the physical one.
+bool wsVulkanCreateLogicalDevice() {
+	// Get required queue family indices.
+	wsVulkanQueueFamilyIndices indices;
+	wsVulkanFindQueueFamilies(&indices, &gpuVK);
+	
+	// Specify creation info for logical_gpuVK's queue families.
+	VkDeviceQueueCreateInfo queue_create_info;
+	queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	queue_create_info.queueFamilyIndex = indices.graphics_family;
+	queue_create_info.queueCount = 1;
+	
+	// Specify a queue priority from 0.0f-1.0f.  Required regardless of number of queues; influences scheduling of command buffer execution.
+	float queue_priority = 1.0f;
+	queue_create_info.pQueuePriorities = &queue_priority;
+	
+	// Used to specify device features that will be used.
+	VkPhysicalDeviceFeatures device_features;
+	
+	// Specify creation info for logical_gpuVK.
+	VkDeviceCreateInfo create_info;
+	create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	create_info.pQueueCreateInfos = &queue_create_info;
+	create_info.queueCreateInfoCount = 1;
+	create_info.pEnabledFeatures = &device_features;
+	
+	create_info.enabledExtensionCount = 0;
+	if(!debug)
+		create_info.enabledLayerCount = 0;
+	// These are technically deprecated, but we set them anyways to stay fairly backwards-compatible.  Or, we don't!
+	/*if(debug) {
+		create_info.enabledLayerCount = (uint32_t)num_required_layers;
+		create_info.ppEnabledLayerNames = required_layers;
+	} else create_info.enabledLayerCount = 0;*/
+	
+	VkResult result = vkCreateDevice(gpuVK, &create_info, NULL, &logical_gpuVK);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
+		return false;
+	} else printf("Vulkan logical device created!\n");
+	
+	// Assign queue handles from logical_gpuVK.
+	vkGetDeviceQueue(logical_gpuVK, indices.graphics_family, 0, &graphics_queueVK);
+	return true;
+}
+
+// Checks if all queue families have been found.
+bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices) {
+	if(!indices->has_graphics_family)
+		return false;
+	
+	return true;
 }
 
 // Finds queue families and stores their indices in *indices.
@@ -131,8 +202,11 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDe
 		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 			indices->graphics_family = i;
 			indices->has_graphics_family = true;
-			return;
 		}
+		
+		// If we have found all queue families, we are done searching!
+		if(wsVulkanHasFoundAllQueueFamilies(indices))
+			return;
 	}
 }
 
