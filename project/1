@@ -1,0 +1,18 @@
+---Begin Debug---
+Window 0 created: res 640x480
+Input initialized: window ID 0, mouse sens 0.300000
+3 Vulkan extension(s) required by GLFW: VK_KHR_surface	VK_KHR_win32_surface	VK_EXT_debug_utils	
+	All GLFW-required Vulkan extensions are supported!
+1 Vulkan validation layer(s) required: VK_LAYER_KHRONOS_validation	
+	Required Vulkan validation layers are supported!
+Vulkan instance created!
+Vulkan debug messenger created!
+Found GPU with proper Vulkan support!
+
+---Start Debug Run---
+---Stop Debug Run---
+
+Vulkan debug messenger destroyed!
+Vulkan instance destroyed!
+Window 0 destroyed!
+---End Debug---

@@ -13,10 +13,8 @@
 #include"h/input.h"
 #include"h/vulkan_interface.h"
 
-// Enables or disables debug mode.  Broken!?
+// Enables or disables debug mode.
 #define DEBUG true
-
-void wsRender();
 
 int main(int argc, char* argv[]) {
 	printf("---Begin%s---\n", DEBUG ? " Debug" : "");
@@ -26,7 +24,14 @@ int main(int argc, char* argv[]) {
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	
 	wsInputInit(windowID, 0.3f);
-	wsVulkanInit(DEBUG);
+	
+	// Initialize Vulkan
+	VkInstance instanceVK;	// Main Vulkan instance.
+	VkPhysicalDevice gpuVK = NULL;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
+	VkDevice logical_gpuVK = NULL;	// Primary logical device used to interface with the physical device.
+	VkDebugUtilsMessengerEXT debug_msgrVK;	// Main debug messenger.
+	wsVulkanSetDebug(DEBUG);
+	wsVulkanInit(&instanceVK, &gpuVK, &logical_gpuVK, &debug_msgrVK);
 	
 	// Main loop.
 	printf("\n---Start%s Run---\n", DEBUG ? " Debug" : "");
@@ -38,9 +43,10 @@ int main(int argc, char* argv[]) {
 		// wsRun();
 		
 		// Post-logic-step.
-		wsRender();
+		// wsRender();
 		wsInputUpdate();
 		
+		// Should the program close?
 		if(wsInputGetKeyRelease(GLFW_KEY_ESCAPE)) {
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
@@ -48,15 +54,11 @@ int main(int argc, char* argv[]) {
 	printf("---Stop%s Run---\n\n", DEBUG ? " Debug" : "");
 	
 	// Program exit procedure.
-	wsVulkanStop();
+	wsVulkanStop(&instanceVK, &logical_gpuVK, &debug_msgrVK);
 	wsWindowExit(windowID);
 	
 	printf("---End%s---\n", DEBUG ? " Debug" : "");
 	// getchar();
 	return 0;
-}
-
-void wsRender() {
-	
 }
 

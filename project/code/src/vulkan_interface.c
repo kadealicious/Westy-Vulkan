@@ -7,19 +7,18 @@
 
 #include"h/vulkan_interface.h"
 
-#define MAX_QUEUE_FAMILIES 10
-
 // General Vulkan interfacing functions.
-void wsVulkanInit(const bool debug_mode);
-void wsVulkanStop();
+void wsVulkanInit(VkInstance* instance, VkPhysicalDevice* physical_device, VkDevice* logical_device, 
+	VkDebugUtilsMessengerEXT* debug_messenger);
+void wsVulkanStop(VkInstance* instance, VkDevice* logical_device, VkDebugUtilsMessengerEXT* debug_messenger);
 
 // Vulkan initialization functions.
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
 bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
 void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
-bool wsVulkanPickPhysicalDevice();
-int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU);
-bool wsVulkanCreateLogicalDevice();
+bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical_device);
+int wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device);
+bool wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue);
 
 // Queue family management.
 typedef struct wsVulkanQueueFamilyIndices {
@@ -30,8 +29,8 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDe
 bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices);
 
 // Debug-messenger-related functions.
-void wsVulkanInitDebugMessenger();
-void wsVulkanStopDebugMessenger();
+void wsVulkanInitDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger);
+void wsVulkanStopDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger);
 void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoEXT* create_info);
 
 // Vulkan proxy functions.
@@ -46,26 +45,15 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 
 // Debug mode.
 bool debug;
+void wsVulkanSetDebug(const bool debug_mode) { debug = debug_mode; }
 
 
 // Call after wsWindowInit().
-void wsVulkanInit(const bool debug_mode) {
-	debug = debug_mode;
+void wsVulkanInit(VkInstance* instance, VkPhysicalDevice* physical_device, VkDevice* logical_device, 
+	VkDebugUtilsMessengerEXT* debug_messenger) {
 	
-	
-	// Main Vulkan instance.
-	VkInstance instanceVK;
-	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
-	VkPhysicalDevice gpuVK = NULL;
-	// Primary logical device used to interface with the physical device.
-	VkDevice logical_gpuVK;
-
 	// Graphics queue interface.
-	VkQueue graphics_queueVK;
-
-	// Main debug messenger.
-	VkDebugUtilsMessengerEXT debug_msgrVK;
-	
+	VkQueue graphics_queue;
 	
 	// Set application info.
 	VkApplicationInfo app_info;
@@ -103,42 +91,42 @@ void wsVulkanInit(const bool debug_mode) {
 	}
 	
 	// Create Vulkan instance!
-	VkResult result = vkCreateInstance(&create_info, NULL, &instanceVK);
+	VkResult result = vkCreateInstance(&create_info, NULL, instance);
 	if(result != VK_SUCCESS)
 		printf("ERROR: Vulkan instance creation failed with result code %i!\n", result);
 	else printf("Vulkan instance created!\n");
 	
 	// Self-explanatory.  Used for receiving and sending debug messages to stdout.
 	if(debug) {
-		wsVulkanInitDebugMessenger();
+		wsVulkanInitDebugMessenger(instance, debug_messenger);
 	}
 	
-	if(wsVulkanPickPhysicalDevice()) {
+	if(wsVulkanPickPhysicalDevice(instance, physical_device)) {
 		printf("Found GPU with proper Vulkan support!\n");
 	} else printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
 	
 	// Currently crashes program.
-	/*if(wsVulkanCreateLogicalDevice()) {
+	/*if(wsVulkanCreateLogicalDevice(physical_device, logical_device, graphics_queue)) {
 		printf("Vulkan logical device created!\n");
 	} else printf("ERROR: Vulkan logical device creation failed!\n");*/
 }
 
-void wsVulkanStop() {
+void wsVulkanStop(VkInstance* instance, VkDevice* logical_device, VkDebugUtilsMessengerEXT* debug_messenger) {
 	if(debug) {
-		wsVulkanStopDebugMessenger();
+		wsVulkanStopDebugMessenger(instance, debug_messenger);
 		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
-	vkDestroyDevice(logical_gpuVK, NULL);
-	vkDestroyInstance(instanceVK, NULL);
+	vkDestroyDevice(*logical_device, NULL);
+	vkDestroyInstance(*instance, NULL);
 	printf("Vulkan instance destroyed!\n");
 }
 
 // Creates a logical device to interface with the physical one.
-bool wsVulkanCreateLogicalDevice() {
+bool wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue) {
 	// Get required queue family indices.
 	wsVulkanQueueFamilyIndices indices;
-	wsVulkanFindQueueFamilies(&indices, &gpuVK);
+	wsVulkanFindQueueFamilies(&indices, physical_device);
 	
 	// Specify creation info for logical_gpuVK's queue families.
 	VkDeviceQueueCreateInfo queue_create_info;
@@ -169,14 +157,14 @@ bool wsVulkanCreateLogicalDevice() {
 		create_info.ppEnabledLayerNames = required_layers;
 	} else create_info.enabledLayerCount = 0;*/
 	
-	VkResult result = vkCreateDevice(gpuVK, &create_info, NULL, &logical_gpuVK);
+	VkResult result = vkCreateDevice(*physical_device, &create_info, NULL, logical_device);
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
 		return false;
 	} else printf("Vulkan logical device created!\n");
 	
 	// Assign queue handles from logical_gpuVK.
-	vkGetDeviceQueue(logical_gpuVK, indices.graphics_family, 0, &graphics_queueVK);
+	vkGetDeviceQueue(*logical_device, indices.graphics_family, 0, graphics_queue);
 	return true;
 }
 
@@ -189,11 +177,11 @@ bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices) {
 }
 
 // Finds queue families and stores their indices in *indices.
-void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDevice* GPU) {
+void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDevice* physical_device) {
 	uint32_t num_queue_families = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(*GPU, &num_queue_families, NULL);
+	vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &num_queue_families, NULL);
 	VkQueueFamilyProperties* queue_families = malloc(num_queue_families * sizeof(VkQueueFamilyProperties));
-	vkGetPhysicalDeviceQueueFamilyProperties(*GPU, &num_queue_families, queue_families);
+	vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &num_queue_families, queue_families);
 	
 	indices->has_graphics_family = false;
 	for(int i = 0; i < num_queue_families; i++) {
@@ -211,15 +199,15 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDe
 }
 
 // Pick an appropriate physical device for Vulkan to utilize.  Returns whether or not one was found.
-bool wsVulkanPickPhysicalDevice() {
+bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical_device) {
 	// Get list of physical devices and store in GPUs[].
 	uint32_t num_GPUs = 0;
-	vkEnumeratePhysicalDevices(instanceVK, &num_GPUs, NULL);
+	vkEnumeratePhysicalDevices(*instance, &num_GPUs, NULL);
 	if(num_GPUs <= 0) {
 		return false;
 	}
 	VkPhysicalDevice* GPUs = malloc(num_GPUs * sizeof(VkPhysicalDevice));
-	vkEnumeratePhysicalDevices(instanceVK, &num_GPUs, GPUs);
+	vkEnumeratePhysicalDevices(*instance, &num_GPUs, GPUs);
 	
 	// Pick most suitable GPU.
 	int max_score = -1;
@@ -234,7 +222,7 @@ bool wsVulkanPickPhysicalDevice() {
 	
 	// If the max GPU score is not able to function with the program, then we've got a problemo
 	if(max_score != -1) {
-		gpuVK = GPUs[ndx_GPU];
+		*physical_device = GPUs[ndx_GPU];
 		return true;
 	} else return false;
 	
@@ -242,13 +230,13 @@ bool wsVulkanPickPhysicalDevice() {
 }
 
 // Verify if physical device is suitable for our use-cases and score it based on functionality.
-int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU) {
+int wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device) {
 	int score = 0;
 	
 	VkPhysicalDeviceProperties device_properties;
 	VkPhysicalDeviceFeatures device_features;
-	vkGetPhysicalDeviceProperties(*GPU, &device_properties);
-	vkGetPhysicalDeviceFeatures(*GPU, &device_features);
+	vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
+	vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
 	
 	// Program cannot function without geometry shaders!
 	if(!device_features.geometryShader)
@@ -256,7 +244,7 @@ int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU) {
 	
 	// Program cannot function without certain queue families.
 	wsVulkanQueueFamilyIndices indices;
-	wsVulkanFindQueueFamilies(&indices, GPU);
+	wsVulkanFindQueueFamilies(&indices, physical_device);
 	if(!indices.has_graphics_family)
 		return -1;
 	
@@ -266,22 +254,22 @@ int wsVulkanRatePhysicalDevice(VkPhysicalDevice* GPU) {
 	return score;
 }
 
-void wsVulkanInitDebugMessenger() {
+void wsVulkanInitDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger) {
 	// Populate creation info for debug messenger.
 	VkDebugUtilsMessengerCreateInfoEXT create_info;
 	wsVulkanPopulateDebugMessengerCreationInfo(&create_info);
 	
 	// Create debug messenger!
-	if(wsVulkanCreateDebugUtilsMessengerEXT(instanceVK, &create_info, NULL, &debug_msgrVK) == VK_SUCCESS) {
+	if(wsVulkanCreateDebugUtilsMessengerEXT(*instance, &create_info, NULL, debug_messenger) == VK_SUCCESS) {
 		printf("Vulkan debug messenger created!\n");
 	} else printf("ERROR: Vulkan debug messenger creation failed!\n");
 }
 
-void wsVulkanStopDebugMessenger() {
-	wsVulkanDestroyDebugUtilsMessengerEXT(instanceVK, debug_msgrVK, NULL);
+void wsVulkanStopDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger) {
+	wsVulkanDestroyDebugUtilsMessengerEXT(*instance, *debug_messenger, NULL);
 }
 
-// Create debug messenger.
+// Vulkan proxy function; Create debug messenger.
 VkResult wsVulkanCreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* create_info, 
 	const VkAllocationCallbacks* allocator, 
 	VkDebugUtilsMessengerEXT* debug_messenger) {
@@ -294,7 +282,7 @@ VkResult wsVulkanCreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebug
     }
 }
 
-// Destroy debug messenger.
+// Vulkan proxy function; Destroy debug messenger.
 void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger, const VkAllocationCallbacks* allocator) {
     PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != NULL) {
@@ -302,7 +290,7 @@ void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMess
     }
 }
 
-// Callback for Vulkan debug messages.
+// Vulkan proxy function; Callback for Vulkan debug messages.
 static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msg_severity, 
 	VkDebugUtilsMessageTypeFlagsEXT msg_type, 
 	const VkDebugUtilsMessengerCallbackDataEXT* callback_data, 
@@ -325,7 +313,7 @@ void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoE
 	// Specify creation info for debug messenger.
 	create_info->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	// Specify which messages the debug callback function should be called for.
-	create_info->messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+	create_info->messageSeverity = // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	// Specify which messages the debug callback function should be notified about.
@@ -339,7 +327,7 @@ void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoE
 	create_info->flags = 0;
 }
 
-// For internal use only.
+// Adds debug extensions to required extension list.
 void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions) {
 	// Copy given extension list.
 	char** debug_extensions = malloc((*num_extensions + 1) * sizeof(char*));
