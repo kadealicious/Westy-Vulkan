@@ -6,11 +6,8 @@
 #include<CGLM/vec4.h>
 #include<CGLM/mat4.h>
 
-#define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
 
 #include"h/window.h"
 #include"h/input.h"
@@ -60,7 +57,7 @@ int main(int argc, char* argv[]) {
 	printf("---Stop%s Run---\n\n", DEBUG ? " Debug" : "");
 	
 	// Program exit procedure.
-	wsVulkanStop(&instanceVK, &logical_gpuVK, &debug_msgrVK);
+	wsVulkanStop(&instanceVK, &surfaceVK, &logical_gpuVK, &debug_msgrVK);
 	wsWindowExit(windowID);
 	
 	printf("---End%s---\n", DEBUG ? " Debug" : "");
