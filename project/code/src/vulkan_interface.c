@@ -19,7 +19,7 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
 void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
 bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);
 int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);
-VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, 
+VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, VkQueue* present_queue, 
 	VkSurfaceKHR* surface, uint32_t num_validation_layers, const char* const* validation_layers);
 VkResult wsVulkanCreateSurface(VkSurfaceKHR* surface, VkInstance* instance, uint8_t windowID);
 
@@ -123,7 +123,8 @@ void wsVulkanInit(VkInstance* instance, VkSurfaceKHR* surface, uint8_t windowID,
 	
 	// Create logical device for interfacing with physical device.
 	VkQueue graphics_queue;
-	result = wsVulkanCreateLogicalDevice(physical_device, logical_device, &graphics_queue, surface, 
+	VkQueue present_queue;
+	result = wsVulkanCreateLogicalDevice(physical_device, logical_device, &graphics_queue, &present_queue, surface, 
 		create_info.enabledLayerCount, create_info.ppEnabledLayerNames);
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
@@ -150,22 +151,33 @@ VkResult wsVulkanCreateSurface(VkSurfaceKHR* surface, VkInstance* instance, uint
 }
 
 // Creates a logical device to interface with the physical one.
-VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, 
+VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, VkQueue* present_queue, 
 	VkSurfaceKHR* surface, uint32_t num_validation_layers, const char* const* validation_layers) {
-		
+	
 	// Get required queue family indices.
 	wsVulkanQueueFamilyIndices indices;
 	wsVulkanFindQueueFamilies(&indices, physical_device, surface);
 	
-	// Specify creation info for logical_gpuVK's queue families.
-	VkDeviceQueueCreateInfo queue_create_info = {};
-	queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queue_create_info.queueFamilyIndex = indices.graphics_family;
-	queue_create_info.queueCount = 1;
+	// Figure out how many unique queue families we need to initialize.
+	uint8_t num_unique_queue_families;
+	if(indices.graphics_family == indices.present_family)
+		num_unique_queue_families = 1;
+	else num_unique_queue_families = 2;
 	
-	// Specify a queue priority from 0.0f-1.0f.  Required regardless of number of queues; influences scheduling of command buffer execution.
-	float queue_priority = 1.0f;
-	queue_create_info.pQueuePriorities = &queue_priority;
+	// Store queue family creation infos for later use in binding to logical device creation info.
+	uint32_t unique_queue_family_indices[2] = {indices.graphics_family, indices.present_family};
+	VkDeviceQueueCreateInfo* queue_create_infos = calloc(num_unique_queue_families, sizeof(VkDeviceQueueCreateInfo));
+	
+	// Specify creation info for queue families.
+	for(uint8_t i = 0; i < num_unique_queue_families; i++) {
+		queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_infos[i].queueFamilyIndex = unique_queue_family_indices[i];
+		queue_create_infos[i].queueCount = 1;
+		
+		// Specify a queue priority from 0.0f-1.0f.  Required regardless of number of queues; influences scheduling of command buffer execution.
+		float queue_priority = 1.0f;
+		queue_create_infos[i].pQueuePriorities = &queue_priority;
+	}
 	
 	// Used to specify device features that will be used.
 	VkPhysicalDeviceFeatures device_features = {};
@@ -173,11 +185,16 @@ VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice
 	// Specify creation info for logical_gpuVK.
 	VkDeviceCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	create_info.pQueueCreateInfos = &queue_create_info;
-	create_info.queueCreateInfoCount = 1;
+	
+	// Specify queue creation info count & location.
+	create_info.queueCreateInfoCount = num_unique_queue_families;
+	create_info.pQueueCreateInfos = queue_create_infos;
+	
+	// Device features.
 	create_info.pEnabledFeatures = &device_features;
 	create_info.pNext = NULL;
 	
+	// Modern way of handling device-specific validation layers.
 	create_info.enabledExtensionCount = 0;
 	create_info.ppEnabledExtensionNames = NULL;
 	// Device-specific validation layers are deprecated for modern API versions, but required for older versions.
@@ -188,8 +205,16 @@ VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice
 	
 	// Create logical_device and return result!
 	VkResult result = vkCreateDevice(*physical_device, &create_info, NULL, logical_device);
+	
 	// Assign queue handles from logical_device.
 	vkGetDeviceQueue(*logical_device, indices.graphics_family, 0, graphics_queue);
+	vkGetDeviceQueue(*logical_device, indices.present_family, 0, present_queue);
+	
+	printf("%i Vulkan queue family indices are as specified:\tgraphics: %i\tpresent: %i\n", num_unique_queue_families, indices.graphics_family, indices.present_family);
+	
+	// FREE MEMORY!!!
+	free(queue_create_infos);
+	
 	return result;
 }
 
