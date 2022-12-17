@@ -16,7 +16,7 @@ void wsVulkanStop(VkInstance* instance, VkSurfaceKHR* surface, VkDevice* logical
 // Vulkan initialization functions.
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
 bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
-void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
+void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
 bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);
 int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);
 VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, VkQueue* present_queue, 
@@ -386,7 +386,7 @@ void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoE
 	// Specify creation info for debug messenger.
 	create_info->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	// Specify which messages the debug callback function should be called for.
-	create_info->messageSeverity = // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+	create_info->messageSeverity = //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	// Specify which messages the debug callback function should be notified about.
@@ -401,7 +401,7 @@ void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoE
 }
 
 // Adds debug extensions to required extension list.
-void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions) {
+void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensions) {
 	// Copy given extension list.
 	char** debug_extensions = malloc((*num_extensions + 1) * sizeof(char*));
 	for(int32_t i = 0; i < *num_extensions; i++) {
@@ -410,6 +410,9 @@ void wsAddDebugExtensions(const char*** extensions, uint32_t* num_extensions) {
 	
 	// Append Debug utility extension to list.
 	debug_extensions[*num_extensions] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	
+	// FREE MEMORY!!!
+	free(extensions);
 	
 	// Increment original number of extensions and return new extension list.
 	(*num_extensions)++;
@@ -422,7 +425,7 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 	uint32_t num_required_extensions = 0;
 	const char** required_extensions = glfwGetRequiredInstanceExtensions(&num_required_extensions);
 	if(debug) {
-		wsAddDebugExtensions(&required_extensions, &num_required_extensions);
+		wsVulkanAddDebugExtensions(&required_extensions, &num_required_extensions);
 	}
 	
 	// Set correct fields in create_info.  Cannot create instance without this.
@@ -502,7 +505,6 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 		if(!layer_found)
 			return false;
 	}
-	free(available_layers);
 	
 	// If we have all required layers available for use.
 	create_info->enabledLayerCount = num_required_layers;
@@ -512,6 +514,10 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 		printf("%s\t", required_layers[i]);
 	}
 	printf("\n");
+	
+	// FREE MEMORY!!!
+	free(available_layers);
+	free(required_layers);
 	
 	return true;
 }
