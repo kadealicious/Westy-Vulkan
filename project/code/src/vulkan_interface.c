@@ -19,7 +19,7 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);					// E
 bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);				// Enabled extensions required by GLFW, debug mode, etc.
 void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);	// Adds debug extension name to extensions**.
 
-// Device-choosing.
+// Device-choosing and setup.
 bool wsVulkanPickPhysicalDevice(wsVulkan* vk);	// Picks the best-suited GPU for our program.
 int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device);	// Rates GPU based on device features and properties.
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);			// Queries whethor or not physical_device supports required extensions.
@@ -27,9 +27,11 @@ void wsVulkanQuerySwapChainSupport(wsVulkan* vk);										// Queries whether or
 void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChainInfo* swapchain_info);	// Choose swap chain surface format.
 void wsVulkanChooseSwapExtent(wsVulkan* vk);									// Choose swap chain image resolution.
 void wsVulkanChooseSwapPresentMode(wsVulkanSwapChainInfo* swapchain_info);		// Choose swap chain presentation mode.
-VkResult wsVulkanCreateSwapChain(wsVulkan* vk);									// Creates a swap chain for drawing to the screen.
+VkResult wsVulkanCreateSwapChain(wsVulkan* vk);									// Creates a swap chain for image buffering.
+uint32_t wsVulkanCreateImageViews(wsVulkan* vk);								// Creates image views viewing swap chain images; returns number of image views created successfully.
 VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
-VkResult wsVulkanCreateSurface(wsVulkan* vk);		// Creates a surface for drawing to the screen.
+VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing to the screen.
+VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
 
 // Queue family management.
 void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
@@ -132,6 +134,16 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 		printf("ERROR: Vulkan swap chain creation failed with result code %i!\n", result);
 	} else printf("Vulkan swap chain created!\n");
 
+	uint32_t num_created = wsVulkanCreateImageViews(vk);
+	if(num_created != vk->num_swapchain_images) {
+		printf("ERROR: Only %i/%i image views created!\n", num_created, vk->num_swapchain_images);
+	} else printf("%i/%i Vulkan image views created!\n", num_created, vk->num_swapchain_images);
+
+	result = wsVulkanCreateGraphicsPipeline(vk);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan graphics pipeline creation failed!\n");
+	} else printf("Vulkan graphics pipeline created!\n");
+
 	printf("---End Vulkan Initialization!---\n");
 }
 
@@ -141,17 +153,67 @@ void wsVulkanStop(wsVulkan* vk) {
 		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
+	for(uint32_t i = 0; i < vk->num_swapchain_images; i++) {
+		vkDestroyImageView(vk->logical_device, vk->swapchain_imageviews[i], NULL);
+	}
+	free(vk->swapchain_imageviews);
+	printf("Vulkan image views destroyed!\n");
+
+	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain, NULL);
 	free(vk->swapchain_info.formats);
 	free(vk->swapchain_info.present_modes);
 	free(vk->swapchain_images);
-	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain, NULL);
 	printf("Vulkan swap chain destroyed!\n");
+	
 	vkDestroyDevice(vk->logical_device, NULL);
 	printf("Vulkan logical device destroyed!\n");
 	vkDestroySurfaceKHR(vk->instance, vk->surface, NULL);
 	printf("Vulkan surface destroyed!\n");
 	vkDestroyInstance(vk->instance, NULL);
 	printf("Vulkan instance destroyed!\n");
+}
+
+VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
+
+}
+
+// Returns number of image views created successfully.
+uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
+	uint32_t num_created = 0;
+
+	// Allocate space for our image views within struct vk.
+	vk->swapchain_imageviews = malloc(vk->num_swapchain_images * sizeof(VkImageView));
+
+	// Create image view for each swap chain image.
+	for(uint32_t i = 0; i < vk->num_swapchain_images; i++) {
+		VkImageViewCreateInfo create_info = {};
+		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		create_info.image = vk->swapchain_images[i];
+		create_info.pNext = NULL;
+		create_info.flags = 0;
+		create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		create_info.format = vk->swapchain_imageformat;
+
+		// Stick to default color mapping.
+		create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+		// subresourceRange describes what the images purpose is, as well as which part of the image we will be accessing.
+		create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		create_info.subresourceRange.baseMipLevel = 0;	// Mipping &...
+		create_info.subresourceRange.levelCount = 1;	// Mapping!
+		create_info.subresourceRange.baseArrayLayer = 0;
+		create_info.subresourceRange.layerCount = 1;
+
+		VkResult result = vkCreateImageView(vk->logical_device, &create_info, NULL, &vk->swapchain_imageviews[i]);
+		if(result != VK_SUCCESS)
+			printf("ERROR: Image view %i not created successfully; code %i!\n", i, result);
+		else num_created++;
+	}
+
+	return num_created;
 }
 
 VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
@@ -163,6 +225,7 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 
 	// Recommended to add at least 1 extra image to swap chain buffer to reduce wait times during rendering.
 	uint32_t num_images = vk->swapchain_info.capabilities.minImageCount + 2;
+	vk->num_swapchain_images = num_images;
 
 	// Specify swap chain creation info.
 	VkSwapchainCreateInfoKHR create_info;
@@ -204,7 +267,11 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	
 	// Set current swap chain image format and extent within struct vk.
 	vk->swapchain_imageformat = vk->swapchain_info.surface_format.format;
+	vk->swapchain_presentmode = vk->swapchain_info.present_mode;
 	vk->swapchain_extent = vk->swapchain_info.extent;
+
+	printf("Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
+		vk->swapchain_extent.width, vk->swapchain_extent.height, vk->swapchain_info.surface_format.format, vk->swapchain_presentmode);
 
 	return result;
 }
@@ -713,7 +780,8 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	
 	// FREE MEMORY!!!
 	free(available_layers);
-	free(required_layers);
+	// I believe this sometimes causes validation layers to cry.
+	// free(required_layers);
 	
 	return true;
 }

@@ -5,6 +5,8 @@
 
 #include <vulkan/vulkan.h>
 
+#define NUM_MAX_PIPELINES 100
+
 // Swap chain support details.
 typedef struct wsVulkanSwapChainInfo {
 	VkSurfaceCapabilitiesKHR capabilities;
@@ -37,20 +39,25 @@ typedef struct wsVulkan {
 	VkInstance instance;	// Main Vulkan instance.
 	VkSurfaceKHR surface;	// Window surface for drawing.
 	VkPhysicalDevice	physical_device;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
-	VkDevice			logical_device;	// Primary logical device used to interface with the physical device.
+	VkDevice			logical_device;		// Primary logical device used to interface with the physical device.
 	VkDebugUtilsMessengerEXT debug_messenger;	// Main debug messenger.
 
-	wsVulkanQueueFamilyIndices indices;
-	VkQueue graphics_queue;
-	VkQueue present_queue;
+	wsVulkanQueueFamilyIndices indices;	// Queue family indices.
+	VkQueue graphics_queue;				// Queue for submitting graphical commands.
+	VkQueue present_queue;				// Queue for submitting presentation commands.
 
-	VkSwapchainKHR swapchain;
-	VkImage* swapchain_images;
-	VkFormat swapchain_imageformat;
-	VkExtent2D swapchain_extent;
-	wsVulkanSwapChainInfo swapchain_info;
+	VkSwapchainKHR swapchain;			// Swap chain.
+	uint32_t num_swapchain_images;
+	VkImage* swapchain_images;			// Pointer to array of (4) swap chain images.
+	VkImageView* swapchain_imageviews;	// How do we view/use each image in the swap chain?
+	VkFormat swapchain_imageformat;		// What image format is our swap chain using?
+	VkPresentModeKHR swapchain_presentmode;	// Stores presentation mode of swap chain.
+	VkExtent2D swapchain_extent;		// What is the resolution of the swap chain images?
+	wsVulkanSwapChainInfo swapchain_info;	// Struct containing swapchain capabilities, surface formats, and presentation modes.
+	
+	uint8_t pipelineIDs[NUM_MAX_PIPELINES];	// Holds IDs of all graphics pipelines.
 
-	uint8_t windowID;
+	uint8_t windowID;	// Used for interfacing with GLFW window.
 } wsVulkan;
 
 // Vulkan interfacing functions.
