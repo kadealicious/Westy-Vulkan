@@ -1,6 +1,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<limits.h>
 
 #include <vulkan/vulkan.h>
 #include<GLFW/glfw3.h>
@@ -8,38 +9,31 @@
 #include"h/vulkan_interface.h"
 #include"h/window.h"
 
+
 // General Vulkan interfacing functions.
-void wsVulkanInit(VkInstance* instance, VkSurfaceKHR* surface, uint8_t windowID, VkPhysicalDevice* physical_device, VkDevice* logical_device, 
-	VkDebugUtilsMessengerEXT* debug_messenger);
-void wsVulkanStop(VkInstance* instance, VkSurfaceKHR* surface, VkDevice* logical_device, VkDebugUtilsMessengerEXT* debug_messenger);
+void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
+void wsVulkanStop(wsVulkan* vk);
 
 // Vulkan initialization functions.
-bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);
-bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);
-void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);
-bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);
-int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);
-VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, VkQueue* present_queue, 
-	VkSurfaceKHR* surface, uint32_t num_validation_layers, const char* const* validation_layers);
-VkResult wsVulkanCreateSurface(VkSurfaceKHR* surface, VkInstance* instance, uint8_t windowID);
+bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);		// Enabled validation layers for detailed debugging.		
+bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);	// Enabled extensions required by GLFW, debug mode, etc.
+void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);	// Adds debug extension name to extensions**.
+VkResult wsVulkanCreateSurface(wsVulkan* vk, uint8_t windowID);		// Creates a surface for drawing to the screen.
+void wsVulkanQuerySwapChainSupport(wsVulkan* vk);
+
+// Device-choosing.
+bool wsVulkanPickPhysicalDevice(wsVulkan* vk);	// Picks the best-suited GPU for our program.
+int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device);	// Rates GPU based on device features and properties.
+bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);			// CHecks GPU's extension support and makes sure it is sufficient.
+VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
 
 // Queue family management.
-typedef struct wsVulkanQueueFamilyIndices {
-	// Used for drawing graphics!
-	uint32_t graphics_family;
-	bool has_graphics_family;
-	
-	// Used for presenting surfaces to the window.
-	uint32_t present_family;
-	bool has_present_family;
-	
-} wsVulkanQueueFamilyIndices;
-void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);
-bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices);
+void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
+bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices);	// Checks if all required queue families have been found.
 
 // Debug-messenger-related functions.
-VkResult wsVulkanInitDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger);
-void wsVulkanStopDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger);
+VkResult wsVulkanInitDebugMessenger(wsVulkan* vk);
+void wsVulkanStopDebugMessenger(wsVulkan* vk);
 void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoEXT* create_info);
 
 // Vulkan proxy functions.
@@ -58,8 +52,7 @@ void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
 
 // Call after wsWindowInit().
-void wsVulkanInit(VkInstance* instance, VkSurfaceKHR* surface, uint8_t windowID, VkPhysicalDevice* physical_device, VkDevice* logical_device, 
-	VkDebugUtilsMessengerEXT* debug_messenger) {
+void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	
 	// Set application info.
 	VkApplicationInfo app_info;
@@ -97,75 +90,104 @@ void wsVulkanInit(VkInstance* instance, VkSurfaceKHR* surface, uint8_t windowID,
 	}
 	
 	// Create Vulkan instance!
-	VkResult result = vkCreateInstance(&create_info, NULL, instance);
+	VkResult result = vkCreateInstance(&create_info, NULL, &vk->instance);
 	if(result != VK_SUCCESS)
 		printf("ERROR: Vulkan instance creation failed with result code %i!\n", result);
 	else printf("Vulkan instance created!\n");
 	
 	// Self-explanatory.  Used for receiving and sending debug messages to stdout.
 	if(debug) {
-		result = wsVulkanInitDebugMessenger(instance, debug_messenger);
+		result = wsVulkanInitDebugMessenger(vk);
 		if(result != VK_SUCCESS) {
 			printf("ERROR: Vulkan debug messenger creation failed with result code %i!\n", result);
 		} else printf("Vulkan debug messenger created!\n");
 	}
 	
 	// Window surface creation procedure.
-	result = wsVulkanCreateSurface(surface, instance, windowID);
+	result = wsVulkanCreateSurface(vk, windowID);
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan surface creation for window %i failed with result code %i!\n", windowID, result);
 	} else printf("Vulkan surface created for window %i!\n", windowID);
 	
 	// Find best-suited physical device.
-	if(!wsVulkanPickPhysicalDevice(instance, physical_device, surface)) {
+	if(!wsVulkanPickPhysicalDevice(vk)) {
 		printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
 	} else printf("Found GPU with proper Vulkan support!\n");
 	
 	// Create logical device for interfacing with physical device.
-	VkQueue graphics_queue;
-	VkQueue present_queue;
-	result = wsVulkanCreateLogicalDevice(physical_device, logical_device, &graphics_queue, &present_queue, surface, 
-		create_info.enabledLayerCount, create_info.ppEnabledLayerNames);
+	result = wsVulkanCreateLogicalDevice(vk, create_info.enabledLayerCount, create_info.ppEnabledLayerNames);
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
 	} else printf("Vulkan logical device created!\n");
 }
 
-void wsVulkanStop(VkInstance* instance, VkSurfaceKHR* surface, VkDevice* logical_device, VkDebugUtilsMessengerEXT* debug_messenger) {
+void wsVulkanStop(wsVulkan* vk) {
 	if(debug) {
-		wsVulkanStopDebugMessenger(instance, debug_messenger);
+		wsVulkanStopDebugMessenger(vk);
 		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
-	vkDestroyDevice(*logical_device, NULL);
+	vkDestroyDevice(vk->logical_device, NULL);
 	printf("Vulkan logical device destroyed!\n");
-	vkDestroySurfaceKHR(*instance, *surface, NULL);
+	vkDestroySurfaceKHR(vk->instance, vk->surface, NULL);
 	printf("Vulkan surface destroyed!\n");
-	vkDestroyInstance(*instance, NULL);
+	vkDestroyInstance(vk->instance, NULL);
 	printf("Vulkan instance destroyed!\n");
 }
 
+void wsVulkanQuerySwapChainSupport(wsVulkan* vk) {
+	// Query surface details into vk->swapchain_deets.
+
+
+	// TODO: MAKE THIS NOT CRASH.
+
+
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physical_device, vk->surface, &vk->swapchain_info.capabilities);
+
+	// Query supported surface formats.
+	uint32_t num_formats;
+	VkSurfaceFormatKHR* formats = vk->swapchain_info.formats;
+	
+	vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, NULL);
+	vk->swapchain_info.num_formats = num_formats;
+
+	if(num_formats != 0) {
+		formats = malloc(num_formats * sizeof(*formats));
+		vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, formats);
+	}
+
+	// Query supported presentation modes.
+	uint32_t num_present_modes;
+	VkPresentModeKHR* present_modes = vk->swapchain_info.present_modes;
+	
+	vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, NULL);
+	vk->swapchain_info.num_present_modes = num_present_modes;
+
+	if(num_present_modes != 0) {
+		present_modes = malloc(num_present_modes * sizeof(*present_modes));
+		vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, present_modes);
+	}
+}
+
 // Creates a surface bound to our GLFW window.
-VkResult wsVulkanCreateSurface(VkSurfaceKHR* surface, VkInstance* instance, uint8_t windowID) {
-	return glfwCreateWindowSurface(*instance, wsWindowGetPtr(windowID), NULL, surface);
+VkResult wsVulkanCreateSurface(wsVulkan* vk, uint8_t windowID) {
+	return glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(windowID), NULL, &vk->surface);
 }
 
 // Creates a logical device to interface with the physical one.
-VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice* logical_device, VkQueue* graphics_queue, VkQueue* present_queue, 
-	VkSurfaceKHR* surface, uint32_t num_validation_layers, const char* const* validation_layers) {
+VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers) {
 	
-	// Get required queue family indices.
-	wsVulkanQueueFamilyIndices indices;
-	wsVulkanFindQueueFamilies(&indices, physical_device, surface);
+	// Get required queue family indices and store them in vk.
+	wsVulkanFindQueueFamilies(&vk->indices, &vk->physical_device, &vk->surface);
 	
 	// Figure out how many unique queue families we need to initialize.
 	uint8_t num_unique_queue_families;
-	if(indices.graphics_family == indices.present_family)
+	if(vk->indices.graphics_family == vk->indices.present_family)
 		num_unique_queue_families = 1;
 	else num_unique_queue_families = 2;
 	
 	// Store queue family creation infos for later use in binding to logical device creation info.
-	uint32_t unique_queue_family_indices[2] = {indices.graphics_family, indices.present_family};
+	uint32_t unique_queue_family_indices[2] = {vk->indices.graphics_family, vk->indices.present_family};
 	VkDeviceQueueCreateInfo* queue_create_infos = calloc(num_unique_queue_families, sizeof(VkDeviceQueueCreateInfo));
 	
 	// Specify creation info for queue families.
@@ -195,8 +217,9 @@ VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice
 	create_info.pNext = NULL;
 	
 	// Modern way of handling device-specific validation layers.
-	create_info.enabledExtensionCount = 0;
-	create_info.ppEnabledExtensionNames = NULL;
+	const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+	create_info.enabledExtensionCount = 1;
+	create_info.ppEnabledExtensionNames = device_extensions;
 	// Device-specific validation layers are deprecated for modern API versions, but required for older versions.
 	if(debug) {
 		create_info.enabledLayerCount = (uint32_t)num_validation_layers;
@@ -204,13 +227,14 @@ VkResult wsVulkanCreateLogicalDevice(VkPhysicalDevice* physical_device, VkDevice
 	} else create_info.enabledLayerCount = 0;
 	
 	// Create logical_device and return result!
-	VkResult result = vkCreateDevice(*physical_device, &create_info, NULL, logical_device);
+	VkResult result = vkCreateDevice(vk->physical_device, &create_info, NULL, &vk->logical_device);
 	
 	// Assign queue handles from logical_device.
-	vkGetDeviceQueue(*logical_device, indices.graphics_family, 0, graphics_queue);
-	vkGetDeviceQueue(*logical_device, indices.present_family, 0, present_queue);
+	vkGetDeviceQueue(vk->logical_device, vk->indices.graphics_family, 0, &vk->graphics_queue);
+	vkGetDeviceQueue(vk->logical_device, vk->indices.present_family, 0, &vk->present_queue);
 	
-	printf("%i Vulkan queue family indices are as specified:\tgraphics: %i\tpresent: %i\n", num_unique_queue_families, indices.graphics_family, indices.present_family);
+	printf("%i unique Vulkan queue family indices are as specified:\n", num_unique_queue_families);
+	printf("\tgraphics: %i\n\tpresentation: %i\n", vk->indices.graphics_family, vk->indices.present_family);
 	
 	// FREE MEMORY!!!
 	free(queue_create_infos);
@@ -265,30 +289,37 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDe
 }
 
 // Pick an appropriate physical device for Vulkan to utilize.  Returns whether or not one was found.
-bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface) {
+bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
 	// Get list of physical devices and store in GPUs[].
 	uint32_t num_GPUs = 0;
-	vkEnumeratePhysicalDevices(*instance, &num_GPUs, NULL);
+	vkEnumeratePhysicalDevices(vk->instance, &num_GPUs, NULL);
 	if(num_GPUs <= 0) {
 		return false;
 	}
 	VkPhysicalDevice* GPUs = malloc(num_GPUs * sizeof(VkPhysicalDevice));
-	vkEnumeratePhysicalDevices(*instance, &num_GPUs, GPUs);
+	vkEnumeratePhysicalDevices(vk->instance, &num_GPUs, GPUs);
 	
-	// Pick most suitable GPU.
+	// Pick GPU with highest score.
 	int32_t max_score = -1;
 	int32_t ndx_GPU = -1;
+
+	printf("Rating %i GPU(s)...\n", num_GPUs);
+
 	for(int32_t i = 0; i < num_GPUs; i++) {
-		int32_t current_score = wsVulkanRatePhysicalDevice(&(GPUs[i]), surface);
+		printf("GPU %i: \t", i);
+
+		int32_t current_score = wsVulkanRatePhysicalDevice(vk, &(GPUs[i]));
 		if(current_score > max_score) {
 			max_score = current_score;
 			ndx_GPU = i;
 		}
+
+		printf("\tGPU %i scored %i!\n", i, current_score);
 	}
 	
 	// If the max GPU score is not able to function with the program, then we've got a problemo
 	if(max_score != -1) {
-		*physical_device = GPUs[ndx_GPU];
+		vk->physical_device = GPUs[ndx_GPU];
 		
 		// TODO: Make this list the properties of chosen GPU.
 		
@@ -298,8 +329,47 @@ bool wsVulkanPickPhysicalDevice(VkInstance* instance, VkPhysicalDevice* physical
 	// Don't free GPU list so that we can allow user to swap GPUs in settings later.
 }
 
+bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device) {
+	// Query number of extensions available and their names.
+	uint32_t num_available_extensions;
+	vkEnumerateDeviceExtensionProperties(*physical_device, NULL, &num_available_extensions, NULL);
+	VkExtensionProperties* available_extensions = malloc(num_available_extensions * sizeof(VkExtensionProperties));
+	vkEnumerateDeviceExtensionProperties(*physical_device, NULL, &num_available_extensions, available_extensions);
+
+	// Required device-specific extensions to verify we have access to.
+	uint32_t num_required_extensions = 1;
+	const char* required_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+	printf("%i device-specific Vulkan extensions required: \n", num_required_extensions);
+	for(int32_t i = 0; i < num_required_extensions; i++) {
+		printf("\t%s\n", required_extensions[i]);
+	}
+
+	// Search for each required extension.
+	for(uint32_t i = 0; i < num_required_extensions; i++) {
+		bool has_found_extension = false;
+		
+		for(uint32_t j = 0; j < num_available_extensions; j++) {
+			if(strcmp(required_extensions[i], available_extensions[j].extensionName) == 0) {
+				has_found_extension = true;
+				break;
+			}
+		}
+
+		if(!has_found_extension) {
+			printf("\tERROR: Not all required device-specific Vulkan extension(s) are supported by your GPU!\n");
+			return false;
+		}
+	}
+
+	printf("\tAll required device-specific Vulkan extensions are supported by your GPU!\n");
+
+	return true;
+}
+
 // Verify if physical device is suitable for our use-cases and score it based on functionality.
-int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device, VkSurfaceKHR* surface) {
+int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device) {
+	enum GPU_INCOMPATIBILITy_CODES {NO_GEOMETRY_SHADER = INT_MIN, NO_GRAPHICS_FAMILY, NO_PRESENTATION_FAMILY, NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT};
 	int32_t score = 0;
 	
 	VkPhysicalDeviceProperties device_properties;
@@ -309,16 +379,26 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device, VkSurfaceK
 	
 	// Program cannot function without geometry shaders!
 	if(!device_features.geometryShader)
-		return -1;
+		return NO_GEOMETRY_SHADER;
 	
 	// Program cannot function without certain queue families.
 	wsVulkanQueueFamilyIndices indices;
-	wsVulkanFindQueueFamilies(&indices, physical_device, surface);
+	wsVulkanFindQueueFamilies(&indices, physical_device, &vk->surface);
 	if(!indices.has_graphics_family)
-		return -1;
+		return NO_GRAPHICS_FAMILY;
 	if(!indices.has_present_family)
-		return -1;
+		return NO_PRESENTATION_FAMILY;
 	
+	// Program cannot function without certain device-specific extensions.
+	if(!wsVulkanCheckDeviceExtensionSupport(physical_device))
+		return NO_DEVICE_EXTENSION_SUPPORT;
+	
+	// Program cannot function without proper swapchain support!
+	wsVulkanQuerySwapChainSupport(vk);
+	printf("%i %i\n", vk->swapchain_info.num_formats, vk->swapchain_info.num_present_modes);
+	if(vk->swapchain_info.num_formats <= 0 || vk->swapchain_info.num_present_modes <= 0)
+		return NO_SWAPCHAIN_SUPPORT;
+
 	// If these are the same queue family, this could increase performance.
 	score += indices.graphics_family == indices.present_family ? 500 : 0;
 	
@@ -329,17 +409,17 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device, VkSurfaceK
 	return score;
 }
 
-VkResult wsVulkanInitDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger) {
+VkResult wsVulkanInitDebugMessenger(wsVulkan* vk) {
 	// Populate creation info for debug messenger.
 	VkDebugUtilsMessengerCreateInfoEXT create_info;
 	wsVulkanPopulateDebugMessengerCreationInfo(&create_info);
 	
 	// Create debug messenger!
-	return wsVulkanCreateDebugUtilsMessengerEXT(*instance, &create_info, NULL, debug_messenger);
+	return wsVulkanCreateDebugUtilsMessengerEXT(vk->instance, &create_info, NULL, &vk->debug_messenger);
 }
 
-void wsVulkanStopDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debug_messenger) {
-	wsVulkanDestroyDebugUtilsMessengerEXT(*instance, *debug_messenger, NULL);
+void wsVulkanStopDebugMessenger(wsVulkan* vk) {
+	wsVulkanDestroyDebugUtilsMessengerEXT(vk->instance, vk->debug_messenger, NULL);
 }
 
 // Vulkan proxy function; Create debug messenger.
@@ -386,7 +466,7 @@ void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoE
 	// Specify creation info for debug messenger.
 	create_info->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	// Specify which messages the debug callback function should be called for.
-	create_info->messageSeverity = //VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+	create_info->messageSeverity = // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	// Specify which messages the debug callback function should be notified about.
@@ -434,11 +514,10 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 	create_info->ppEnabledExtensionNames = required_extensions;
 	
 	// List all required extensions.
-	printf("%i Vulkan extension(s) required by GLFW: ", num_required_extensions);
+	printf("%i Vulkan extension(s) required by GLFW: \n", num_required_extensions);
 	for(int32_t i = 0; i < num_required_extensions; i++) {
-		printf("%s\t", required_extensions[i]);
+		printf("\t%s\n", required_extensions[i]);
 	}
-	printf("\n");
 	
 	// Fetch required extensions & required extension count.
 	uint32_t num_available_extensions = 0;
@@ -509,11 +588,10 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	// If we have all required layers available for use.
 	create_info->enabledLayerCount = num_required_layers;
 	create_info->ppEnabledLayerNames = (const char**)required_layers;
-	printf("%i Vulkan validation layer(s) required: ", num_required_layers);
+	printf("%i Vulkan validation layer(s) required: \n", num_required_layers);
 	for(int32_t i = 0; i < num_required_layers; i++) {
-		printf("%s\t", required_layers[i]);
+		printf("\t%s\n", required_layers[i]);
 	}
-	printf("\n");
 	
 	// FREE MEMORY!!!
 	free(available_layers);

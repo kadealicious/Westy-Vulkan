@@ -28,13 +28,9 @@ int main(int argc, char* argv[]) {
 	wsInputInit(windowID, 0.3f);
 	
 	// Initialize Vulkan.
-	VkInstance instanceVK;	// Main Vulkan instance.
-	VkSurfaceKHR surfaceVK;	// Window surface for drawing.
-	VkPhysicalDevice gpuVK = NULL;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
-	VkDevice logical_gpuVK = NULL;	// Primary logical device used to interface with the physical device.
-	VkDebugUtilsMessengerEXT debug_msgrVK;	// Main debug messenger.
+	wsVulkan vk = {};
 	wsVulkanSetDebug(DEBUG);
-	wsVulkanInit(&instanceVK, &surfaceVK, windowID, &gpuVK, &logical_gpuVK, &debug_msgrVK);
+	wsVulkanInit(&vk, windowID);
 	
 	// Main loop.
 	printf("\n---Start%s Run---\n", DEBUG ? " Debug" : "");
@@ -57,7 +53,7 @@ int main(int argc, char* argv[]) {
 	printf("---Stop%s Run---\n\n", DEBUG ? " Debug" : "");
 	
 	// Program exit procedure.
-	wsVulkanStop(&instanceVK, &surfaceVK, &logical_gpuVK, &debug_msgrVK);
+	wsVulkanStop(&vk);
 	wsWindowExit(windowID);
 	
 	printf("---End%s---\n", DEBUG ? " Debug" : "");
