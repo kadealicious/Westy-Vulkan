@@ -8,6 +8,7 @@
 
 #include"h/vulkan_interface.h"
 #include"h/window.h"
+#include"h/shader.h"
 
 
 // General Vulkan interfacing functions.
