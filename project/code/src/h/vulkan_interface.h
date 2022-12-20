@@ -45,6 +45,9 @@ typedef struct wsVulkan {
 	VkQueue present_queue;
 
 	VkSwapchainKHR swapchain;
+	VkImage* swapchain_images;
+	VkFormat swapchain_imageformat;
+	VkExtent2D swapchain_extent;
 	wsVulkanSwapChainInfo swapchain_info;
 
 	uint8_t windowID;

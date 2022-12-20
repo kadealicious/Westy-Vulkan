@@ -141,6 +141,9 @@ void wsVulkanStop(wsVulkan* vk) {
 		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
+	free(vk->swapchain_info.formats);
+	free(vk->swapchain_info.present_modes);
+	free(vk->swapchain_images);
 	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain, NULL);
 	printf("Vulkan swap chain destroyed!\n");
 	vkDestroyDevice(vk->logical_device, NULL);
@@ -192,7 +195,18 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	create_info.clipped = VK_TRUE;	// If another window obscures some pixels from our window, should we ignore drawing them?  Yeah, probably.
 	create_info.oldSwapchain = VK_NULL_HANDLE;	// Reference to old swap chain in case we ever have to create a new one!  NULL for now.
 
-	return vkCreateSwapchainKHR(vk->logical_device, &create_info, NULL, &vk->swapchain);
+	VkResult result = vkCreateSwapchainKHR(vk->logical_device, &create_info, NULL, &vk->swapchain);
+	
+	// Store swap chain images in struct vk.
+	vkGetSwapchainImagesKHR(vk->logical_device, vk->swapchain, &num_images, NULL);
+	vk->swapchain_images = malloc(num_images * sizeof(VkImage));
+	vkGetSwapchainImagesKHR(vk->logical_device, vk->swapchain, &num_images, vk->swapchain_images);
+	
+	// Set current swap chain image format and extent within struct vk.
+	vk->swapchain_imageformat = vk->swapchain_info.surface_format.format;
+	vk->swapchain_extent = vk->swapchain_info.extent;
+
+	return result;
 }
 
 // Choose a nice resolution to draw swap chain images at.
