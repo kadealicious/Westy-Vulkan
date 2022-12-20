@@ -19,7 +19,7 @@
 void wsGLFWErrorCallback(int code, const char* description);
 
 int main(int argc, char* argv[]) {
-	printf("---Begin%s---\n", DEBUG ? " Debug" : "");
+	printf("===Begin%s===\n", DEBUG ? " Debug" : "");
 	
 	// Initialize GLFW and related components.
 	uint8_t windowID = wsWindowInit(640, 480);
@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
 	wsVulkanInit(&vk, windowID);
 	
 	// Main loop.
-	printf("\n---Start%s Run---\n", DEBUG ? " Debug" : "");
+	printf("\n===Start%s Run===\n", DEBUG ? " Debug" : "");
 	while(!glfwWindowShouldClose(window)) {
 		// Pre-logic-step.
 		// ws
@@ -50,13 +50,13 @@ int main(int argc, char* argv[]) {
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
 	}
-	printf("---Stop%s Run---\n\n", DEBUG ? " Debug" : "");
+	printf("===Stop%s Run===\n\n", DEBUG ? " Debug" : "");
 	
 	// Program exit procedure.
 	wsVulkanStop(&vk);
 	wsWindowExit(windowID);
 	
-	printf("---End%s---\n", DEBUG ? " Debug" : "");
+	printf("===End%s===\n", DEBUG ? " Debug" : "");
 	// getchar();
 	return 0;
 }

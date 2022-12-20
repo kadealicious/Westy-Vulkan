@@ -8,10 +8,13 @@
 // Swap chain support details.
 typedef struct wsVulkanSwapChainInfo {
 	VkSurfaceCapabilitiesKHR capabilities;
-	
+	VkExtent2D extent;
+
+	VkSurfaceFormatKHR surface_format;
 	VkSurfaceFormatKHR* formats;
 	uint32_t num_formats;
 
+	VkPresentModeKHR present_mode;
 	VkPresentModeKHR* present_modes;
 	uint32_t num_present_modes;
 
@@ -41,7 +44,10 @@ typedef struct wsVulkan {
 	VkQueue graphics_queue;
 	VkQueue present_queue;
 
+	VkSwapchainKHR swapchain;
 	wsVulkanSwapChainInfo swapchain_info;
+
+	uint8_t windowID;
 } wsVulkan;
 
 // Vulkan interfacing functions.

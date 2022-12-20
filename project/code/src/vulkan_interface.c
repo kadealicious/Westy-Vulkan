@@ -15,17 +15,21 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
 void wsVulkanStop(wsVulkan* vk);
 
 // Vulkan initialization functions.
-bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);		// Enabled validation layers for detailed debugging.		
-bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);	// Enabled extensions required by GLFW, debug mode, etc.
+bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);					// Enabled validation layers for detailed debugging.		
+bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);				// Enabled extensions required by GLFW, debug mode, etc.
 void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);	// Adds debug extension name to extensions**.
-VkResult wsVulkanCreateSurface(wsVulkan* vk, uint8_t windowID);		// Creates a surface for drawing to the screen.
-void wsVulkanQuerySwapChainSupport(wsVulkan* vk);
 
 // Device-choosing.
 bool wsVulkanPickPhysicalDevice(wsVulkan* vk);	// Picks the best-suited GPU for our program.
 int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device);	// Rates GPU based on device features and properties.
-bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);			// CHecks GPU's extension support and makes sure it is sufficient.
+bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);			// Queries whethor or not physical_device supports required extensions.
+void wsVulkanQuerySwapChainSupport(wsVulkan* vk);										// Queries whether or not physical_device can support features required by vk.
+void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChainInfo* swapchain_info);	// Choose swap chain surface format.
+void wsVulkanChooseSwapExtent(wsVulkan* vk);									// Choose swap chain image resolution.
+void wsVulkanChooseSwapPresentMode(wsVulkanSwapChainInfo* swapchain_info);		// Choose swap chain presentation mode.
+VkResult wsVulkanCreateSwapChain(wsVulkan* vk);									// Creates a swap chain for drawing to the screen.
 VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
+VkResult wsVulkanCreateSurface(wsVulkan* vk);		// Creates a surface for drawing to the screen.
 
 // Queue family management.
 void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
@@ -53,7 +57,10 @@ void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
 // Call after wsWindowInit().
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
-	
+	printf("---Begin Vulkan Initialization!---\n");
+
+	vk->windowID = windowID;
+
 	// Set application info.
 	VkApplicationInfo app_info;
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -104,10 +111,10 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	}
 	
 	// Window surface creation procedure.
-	result = wsVulkanCreateSurface(vk, windowID);
+	result = wsVulkanCreateSurface(vk);
 	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan surface creation for window %i failed with result code %i!\n", windowID, result);
-	} else printf("Vulkan surface created for window %i!\n", windowID);
+		printf("ERROR: Vulkan surface creation for window %i failed with result code %i!\n", vk->windowID, result);
+	} else printf("Vulkan surface created for window %i!\n", vk->windowID);
 	
 	// Find best-suited physical device.
 	if(!wsVulkanPickPhysicalDevice(vk)) {
@@ -119,6 +126,13 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
 	} else printf("Vulkan logical device created!\n");
+	
+	result = wsVulkanCreateSwapChain(vk);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan swap chain creation failed with result code %i!\n", result);
+	} else printf("Vulkan swap chain created!\n");
+
+	printf("---End Vulkan Initialization!---\n");
 }
 
 void wsVulkanStop(wsVulkan* vk) {
@@ -127,6 +141,8 @@ void wsVulkanStop(wsVulkan* vk) {
 		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
+	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain, NULL);
+	printf("Vulkan swap chain destroyed!\n");
 	vkDestroyDevice(vk->logical_device, NULL);
 	printf("Vulkan logical device destroyed!\n");
 	vkDestroySurfaceKHR(vk->instance, vk->surface, NULL);
@@ -135,43 +151,129 @@ void wsVulkanStop(wsVulkan* vk) {
 	printf("Vulkan instance destroyed!\n");
 }
 
+VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
+	// Initialize swap chain within struct vk.
+	// wsVulkanQuerySwapChainSupport(vk);
+	wsVulkanChooseSwapSurfaceFormat(&vk->swapchain_info);
+	wsVulkanChooseSwapPresentMode(&vk->swapchain_info);
+	wsVulkanChooseSwapExtent(vk);
+
+	// Recommended to add at least 1 extra image to swap chain buffer to reduce wait times during rendering.
+	uint32_t num_images = vk->swapchain_info.capabilities.minImageCount + 2;
+
+	// Specify swap chain creation info.
+	VkSwapchainCreateInfoKHR create_info;
+	create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	create_info.pNext = NULL;
+	create_info.flags = 0;
+	create_info.surface = vk->surface;
+	create_info.minImageCount = num_images;
+	create_info.imageFormat = vk->swapchain_info.surface_format.format;
+	create_info.imageColorSpace = vk->swapchain_info.surface_format.colorSpace;
+	create_info.imageExtent = vk->swapchain_info.extent;
+	create_info.imageArrayLayers = 1;	// Always 1 unless this is a stereoscopic 3D application.
+	create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	// Check if queue family indices are unique.
+	uint32_t queue_family_indices[] = {vk->indices.graphics_family, vk->indices.present_family};
+	if(vk->indices.graphics_family != vk->indices.present_family) {
+		create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		create_info.queueFamilyIndexCount = 2;
+		create_info.pQueueFamilyIndices = queue_family_indices;
+	} else {
+		create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		create_info.queueFamilyIndexCount = 0;	// Optional.
+		create_info.pQueueFamilyIndices = NULL;	// Optional.
+	}
+
+	create_info.preTransform = vk->swapchain_info.capabilities.currentTransform;	// Do we want to apply any transformations to our swap chain content?  Nope!
+	create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;	// Do we want to blend our program into other windows in the window system?  No siree!
+	create_info.presentMode = vk->swapchain_info.present_mode;
+	create_info.clipped = VK_TRUE;	// If another window obscures some pixels from our window, should we ignore drawing them?  Yeah, probably.
+	create_info.oldSwapchain = VK_NULL_HANDLE;	// Reference to old swap chain in case we ever have to create a new one!  NULL for now.
+
+	return vkCreateSwapchainKHR(vk->logical_device, &create_info, NULL, &vk->swapchain);
+}
+
+// Choose a nice resolution to draw swap chain images at.
+uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num < min ? min : num;return t > max ? max : t;}
+void wsVulkanChooseSwapExtent(wsVulkan* vk) {
+	wsVulkanSwapChainInfo* swapchain_info = &vk->swapchain_info;
+	VkSurfaceCapabilitiesKHR* capabilities = &vk->swapchain_info.capabilities;
+	
+	if(capabilities->currentExtent.width != UINT32_MAX) {
+		swapchain_info->extent = capabilities->currentExtent;
+	} else {
+		// Query GLFW Window framebuffer size.
+		int width, height;
+		glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
+
+		// Set extent width.
+		swapchain_info->extent.width = clamp((uint32_t)width, capabilities->minImageExtent.width, capabilities->maxImageExtent.width);
+		swapchain_info->extent.height = clamp((uint32_t)height, capabilities->minImageExtent.height, capabilities->maxImageExtent.height);
+	}
+}
+
+// Choose a presentation mode for our swap chain drawing surface.
+void wsVulkanChooseSwapPresentMode(wsVulkanSwapChainInfo* swapchain_info) {
+	// If we find a presentation mode that works for us, select it and return.
+	for(int32_t i = 0; i < swapchain_info->num_present_modes; i++) {
+		VkPresentModeKHR* current_mode = &swapchain_info->present_modes[i];
+		if(*current_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			swapchain_info->present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+			return;
+		}
+	}
+
+	// If we don't find one that matches our request, pick the only guaranteed presentation mode.
+	swapchain_info->present_mode = VK_PRESENT_MODE_FIFO_KHR;
+}
+
+// Choose a format and color space for our swap chain drawing surface.
+void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChainInfo* swapchain_info) {
+	// If we find a format that works for us, select it and return.
+	for(int32_t i = 0; i < swapchain_info->num_formats; i++) {
+		VkSurfaceFormatKHR* current_format = &swapchain_info->formats[i];
+		if(current_format->format == VK_FORMAT_B8G8R8A8_SRGB && current_format->colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			swapchain_info->surface_format = *current_format;
+			return;
+		}
+	}
+
+	// If we don't find one that matches our request, pick the first available format.
+	swapchain_info->surface_format = swapchain_info->formats[0];
+}
+
 void wsVulkanQuerySwapChainSupport(wsVulkan* vk) {
 	// Query surface details into vk->swapchain_deets.
-
-
-	// TODO: MAKE THIS NOT CRASH.
-
-
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physical_device, vk->surface, &vk->swapchain_info.capabilities);
 
 	// Query supported surface formats.
 	uint32_t num_formats;
-	VkSurfaceFormatKHR* formats = vk->swapchain_info.formats;
 	
 	vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, NULL);
 	vk->swapchain_info.num_formats = num_formats;
 
 	if(num_formats != 0) {
-		formats = malloc(num_formats * sizeof(*formats));
-		vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, formats);
+		vk->swapchain_info.formats = malloc(num_formats * sizeof(VkSurfaceFormatKHR));
+		vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, vk->swapchain_info.formats);
 	}
 
 	// Query supported presentation modes.
 	uint32_t num_present_modes;
-	VkPresentModeKHR* present_modes = vk->swapchain_info.present_modes;
 	
 	vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, NULL);
 	vk->swapchain_info.num_present_modes = num_present_modes;
 
 	if(num_present_modes != 0) {
-		present_modes = malloc(num_present_modes * sizeof(*present_modes));
-		vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, present_modes);
+		vk->swapchain_info.present_modes = malloc(num_present_modes * sizeof(VkPresentModeKHR));
+		vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, vk->swapchain_info.present_modes);
 	}
 }
 
 // Creates a surface bound to our GLFW window.
-VkResult wsVulkanCreateSurface(wsVulkan* vk, uint8_t windowID) {
-	return glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(windowID), NULL, &vk->surface);
+VkResult wsVulkanCreateSurface(wsVulkan* vk) {
+	return glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
 }
 
 // Creates a logical device to interface with the physical one.
@@ -233,8 +335,8 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 	vkGetDeviceQueue(vk->logical_device, vk->indices.graphics_family, 0, &vk->graphics_queue);
 	vkGetDeviceQueue(vk->logical_device, vk->indices.present_family, 0, &vk->present_queue);
 	
-	printf("%i unique Vulkan queue family indices are as specified:\n", num_unique_queue_families);
-	printf("\tgraphics: %i\n\tpresentation: %i\n", vk->indices.graphics_family, vk->indices.present_family);
+	printf("%i unique Vulkan queue families exist; indices are as specified:\n", num_unique_queue_families);
+	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->indices.graphics_family, vk->indices.present_family);
 	
 	// FREE MEMORY!!!
 	free(queue_create_infos);
@@ -308,7 +410,10 @@ bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
 	for(int32_t i = 0; i < num_GPUs; i++) {
 		printf("GPU %i: \t", i);
 
+		// Make sure we are checking current GPU's suitability;
+		vk->physical_device = GPUs[i];
 		int32_t current_score = wsVulkanRatePhysicalDevice(vk, &(GPUs[i]));
+
 		if(current_score > max_score) {
 			max_score = current_score;
 			ndx_GPU = i;
@@ -327,6 +432,47 @@ bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
 	} else return false;
 	
 	// Don't free GPU list so that we can allow user to swap GPUs in settings later.
+}
+
+// Verify if physical device is suitable for our use-cases and score it based on functionality.
+int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device) {
+	enum GPU_INCOMPATIBILITy_CODES {NO_GEOMETRY_SHADER = INT_MIN, NO_GRAPHICS_FAMILY, NO_PRESENTATION_FAMILY, NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT};
+	int32_t score = 0;
+	
+	VkPhysicalDeviceProperties device_properties;
+	VkPhysicalDeviceFeatures device_features;
+	vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
+	vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
+	
+	// Program cannot function without geometry shaders!
+	if(!device_features.geometryShader)
+		return NO_GEOMETRY_SHADER;
+	
+	// Program cannot function without certain queue families.
+	wsVulkanQueueFamilyIndices indices;
+	wsVulkanFindQueueFamilies(&indices, physical_device, &vk->surface);
+	if(!indices.has_graphics_family)
+		return NO_GRAPHICS_FAMILY;
+	if(!indices.has_present_family)
+		return NO_PRESENTATION_FAMILY;
+	
+	// Program cannot function without certain device-specific extensions.
+	if(!wsVulkanCheckDeviceExtensionSupport(physical_device))
+		return NO_DEVICE_EXTENSION_SUPPORT;
+	
+	// Program cannot function without proper swapchain support!
+	wsVulkanQuerySwapChainSupport(vk);
+	if(vk->swapchain_info.num_formats <= 0 || vk->swapchain_info.num_present_modes <= 0)
+		return NO_SWAPCHAIN_SUPPORT;
+
+	// If these are the same queue family, this could increase performance.
+	score += indices.graphics_family == indices.present_family ? 500 : 0;
+	
+	// Prefer discrete GPU.  If the max texture size is much lower on the discrete card, it might be old and suck.
+	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
+	score += device_properties.limits.maxImageDimension2D;
+	
+	return score;
 }
 
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device) {
@@ -365,48 +511,6 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device) {
 	printf("\tAll required device-specific Vulkan extensions are supported by your GPU!\n");
 
 	return true;
-}
-
-// Verify if physical device is suitable for our use-cases and score it based on functionality.
-int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device) {
-	enum GPU_INCOMPATIBILITy_CODES {NO_GEOMETRY_SHADER = INT_MIN, NO_GRAPHICS_FAMILY, NO_PRESENTATION_FAMILY, NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT};
-	int32_t score = 0;
-	
-	VkPhysicalDeviceProperties device_properties;
-	VkPhysicalDeviceFeatures device_features;
-	vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
-	vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
-	
-	// Program cannot function without geometry shaders!
-	if(!device_features.geometryShader)
-		return NO_GEOMETRY_SHADER;
-	
-	// Program cannot function without certain queue families.
-	wsVulkanQueueFamilyIndices indices;
-	wsVulkanFindQueueFamilies(&indices, physical_device, &vk->surface);
-	if(!indices.has_graphics_family)
-		return NO_GRAPHICS_FAMILY;
-	if(!indices.has_present_family)
-		return NO_PRESENTATION_FAMILY;
-	
-	// Program cannot function without certain device-specific extensions.
-	if(!wsVulkanCheckDeviceExtensionSupport(physical_device))
-		return NO_DEVICE_EXTENSION_SUPPORT;
-	
-	// Program cannot function without proper swapchain support!
-	wsVulkanQuerySwapChainSupport(vk);
-	printf("%i %i\n", vk->swapchain_info.num_formats, vk->swapchain_info.num_present_modes);
-	if(vk->swapchain_info.num_formats <= 0 || vk->swapchain_info.num_present_modes <= 0)
-		return NO_SWAPCHAIN_SUPPORT;
-
-	// If these are the same queue family, this could increase performance.
-	score += indices.graphics_family == indices.present_family ? 500 : 0;
-	
-	// Prefer discrete GPU.  If the max texture size is much lower on the discrete card, it might be old and suck.
-	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
-	score += device_properties.limits.maxImageDimension2D;
-	
-	return score;
 }
 
 VkResult wsVulkanInitDebugMessenger(wsVulkan* vk) {
