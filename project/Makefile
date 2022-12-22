@@ -26,10 +26,12 @@ code/obj/vulkan_interface.o: code/src/vulkan_interface.c
 code/obj/shader.o: code/src/shader.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 
-app: $(OBJS)
+shaders: 
 	compile_shaders.bat
+
+app: $(OBJS)
 	$(CC) $(CCFLAGS) -o $@ $^ $(CCLIBS)
 
-.PHONY: clean
+.PHONY: app shaders clean
 clean: 
 	-del edit $(OBJS)

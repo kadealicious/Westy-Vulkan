@@ -5,6 +5,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include"shader.h"
+
 #define NUM_MAX_PIPELINES 100
 
 // Swap chain support details.
@@ -56,6 +58,7 @@ typedef struct wsVulkan {
 	wsVulkanSwapChainInfo swapchain_info;	// Struct containing swapchain capabilities, surface formats, and presentation modes.
 	
 	uint8_t pipelineIDs[NUM_MAX_PIPELINES];	// Holds IDs of all graphics pipelines.
+	wsShader shader;	// Used for loading and interfacing with shaders.
 
 	uint8_t windowID;	// Used for interfacing with GLFW window.
 } wsVulkan;

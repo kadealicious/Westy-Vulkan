@@ -33,6 +33,7 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk);								// Creates image views v
 VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
 VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing to the screen.
 VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
+VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Queue family management.
 void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
@@ -149,23 +150,31 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 }
 
 void wsVulkanStop(wsVulkan* vk) {
+	// If in debug mode, destroy debug messenger.
 	if(debug) {
 		wsVulkanStopDebugMessenger(vk);
 		printf("Vulkan debug messenger destroyed!\n");
 	}
-	
+
+	// Unload all shaders.
+	wsShaderUnloadAll(&vk->shader);
+	printf("Shaders unloaded!\n");
+
+	// Destroy swap chain image views.
 	for(uint32_t i = 0; i < vk->num_swapchain_images; i++) {
 		vkDestroyImageView(vk->logical_device, vk->swapchain_imageviews[i], NULL);
 	}
 	free(vk->swapchain_imageviews);
 	printf("Vulkan image views destroyed!\n");
 
+	// Destroy swap chain.
 	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain, NULL);
 	free(vk->swapchain_info.formats);
 	free(vk->swapchain_info.present_modes);
 	free(vk->swapchain_images);
 	printf("Vulkan swap chain destroyed!\n");
 	
+	// Destroy logical device, surface, & instance!
 	vkDestroyDevice(vk->logical_device, NULL);
 	printf("Vulkan logical device destroyed!\n");
 	vkDestroySurfaceKHR(vk->instance, vk->surface, NULL);
@@ -174,8 +183,57 @@ void wsVulkanStop(wsVulkan* vk) {
 	printf("Vulkan instance destroyed!\n");
 }
 
-VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
+VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID) {
+	// Specify shader module creation info.
+	VkShaderModuleCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	create_info.codeSize = vk->shader.shader_size[shaderID];
+	create_info.pCode = (const uint32_t*)vk->shader.shader_data[shaderID];
+	create_info.pNext = NULL;
+	create_info.flags = 0;
 
+	// Create and return shader module!
+	VkShaderModule module;
+	VkResult result = vkCreateShaderModule(vk->logical_device, &create_info, NULL, &module);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Shader module creation failed for shader ID %i with result code %i!\n", shaderID, result);
+	} else printf("Shader module created for shader ID %i!\n", shaderID);
+	return module;
+}
+
+VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
+	// Shader module initialization.
+	wsShaderInit(&vk->shader);
+	uint8_t vertID = wsShaderLoad(&vk->shader, "shaders/spir-v/hellotriangle_vert.spv");
+	uint8_t fragID = wsShaderLoad(&vk->shader, "shaders/spir-v/hellotriangle_frag.spv");
+	VkShaderModule vert_module = wsVulkanCreateShaderModule(vk, vertID);
+	VkShaderModule frag_module = wsVulkanCreateShaderModule(vk, fragID);
+
+	// Initialize vertex shader stage creation info.
+	VkPipelineShaderStageCreateInfo vert_shaderstage_info = {};
+	vert_shaderstage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vert_shaderstage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vert_shaderstage_info.pNext = NULL;
+	vert_shaderstage_info.flags = 0;
+	vert_shaderstage_info.pSpecializationInfo = NULL;
+	vert_shaderstage_info.module = vert_module;
+	vert_shaderstage_info.pName = "main";
+
+	// Initialize fragment shader stage creation info.
+	VkPipelineShaderStageCreateInfo frag_shaderstage_info = {};
+	frag_shaderstage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	frag_shaderstage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	frag_shaderstage_info.pNext = NULL;
+	frag_shaderstage_info.flags = 0;
+	frag_shaderstage_info.pSpecializationInfo = NULL;
+	frag_shaderstage_info.module = frag_module;
+	frag_shaderstage_info.pName = "main";
+
+	VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shaderstage_info, frag_shaderstage_info};
+
+	// Destroy shader modules.
+	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
+	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
 }
 
 // Returns number of image views created successfully.

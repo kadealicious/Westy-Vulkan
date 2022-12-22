@@ -12,7 +12,6 @@
 #include"h/window.h"
 #include"h/input.h"
 #include"h/vulkan_interface.h"
-#include"h/shader.h"
 
 // Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
 #define DEBUG 1
@@ -32,12 +31,6 @@ int main(int argc, char* argv[]) {
 	wsVulkan vk = {};
 	wsVulkanSetDebug(DEBUG);
 	wsVulkanInit(&vk, windowID);
-	
-	// Shader initialization.
-	wsShader shd = {};
-	wsShaderInit(&shd);
-	wsShaderLoad(&shd, "shaders/spir-v/hellotriangle_vert.spv");
-	wsShaderLoad(&shd, "shaders/spir-v/hellotriangle_frag.spv");
 
 	// Main loop.
 	printf("\n===Start%s Run===\n", DEBUG ? " Debug" : "");
@@ -60,7 +53,6 @@ int main(int argc, char* argv[]) {
 	printf("===Stop%s Run===\n\n", DEBUG ? " Debug" : "");
 	
 	// Program exit procedure.
-	wsShaderUnloadAll(&shd);
 	wsVulkanStop(&vk);
 	wsWindowExit(windowID);
 	
