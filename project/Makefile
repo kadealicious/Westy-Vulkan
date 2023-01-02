@@ -1,4 +1,4 @@
-CCFLAGS = -Wall -MMD -std=c99 -O2
+CCFLAGS = -Wall -MMD -std=c99
 CC = gcc
 CCLIBS = -lmingw32 glfw3.dll C:\Windows\System32\vulkan-1.dll
 

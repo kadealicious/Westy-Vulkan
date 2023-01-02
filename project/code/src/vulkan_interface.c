@@ -25,19 +25,20 @@ bool wsVulkanPickPhysicalDevice(wsVulkan* vk);	// Picks the best-suited GPU for 
 int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device);	// Rates GPU based on device features and properties.
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);			// Queries whethor or not physical_device supports required extensions.
 void wsVulkanQuerySwapChainSupport(wsVulkan* vk);										// Queries whether or not physical_device can support features required by vk.
-void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChainInfo* swapchain_info);	// Choose swap chain surface format.
+void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChain* swapchain_info);	// Choose swap chain surface format.
 void wsVulkanChooseSwapExtent(wsVulkan* vk);									// Choose swap chain image resolution.
-void wsVulkanChooseSwapPresentMode(wsVulkanSwapChainInfo* swapchain_info);		// Choose swap chain presentation mode.
+void wsVulkanChooseSwapPresentMode(wsVulkanSwapChain* swapchain_info);		// Choose swap chain presentation mode.
 VkResult wsVulkanCreateSwapChain(wsVulkan* vk);									// Creates a swap chain for image buffering.
 uint32_t wsVulkanCreateImageViews(wsVulkan* vk);								// Creates image views viewing swap chain images; returns number of image views created successfully.
 VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
 VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing to the screen.
+VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass.
 VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
 VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Queue family management.
-void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
-bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices);	// Checks if all required queue families have been found.
+void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
+bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices);	// Checks if all required queue families have been found.
 
 // Debug-messenger-related functions.
 VkResult wsVulkanInitDebugMessenger(wsVulkan* vk);
@@ -70,13 +71,16 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	app_info.pApplicationName = "Westy";
 	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	
 	app_info.pEngineName = "Westy Vulkan";
 	app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+	
 	app_info.apiVersion = VK_API_VERSION_1_0;
 	app_info.pNext = NULL;
 	
+	
 	// Set application info within create_info struct.
-	VkInstanceCreateInfo create_info;
+	VkInstanceCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	create_info.pApplicationInfo = &app_info;
 	
@@ -89,7 +93,7 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	create_info.enabledLayerCount = 0;
 	create_info.pNext = NULL;
 	// If debug, do debug things.  If debug, we will need this struct in a moment for scope-related reasons in vkCreateInstance().
-	VkDebugUtilsMessengerCreateInfoEXT debug_create_info;
+	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {};
 	if(debug) {
 		if(!wsVulkanEnableValidationLayers(&create_info)) {
 			printf("\tERROR: required Vulkan validation layers NOT supported!\n");
@@ -137,13 +141,18 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	} else printf("Vulkan swap chain created!\n");
 
 	uint32_t num_created = wsVulkanCreateImageViews(vk);
-	if(num_created != vk->num_swapchain_images) {
-		printf("ERROR: Only %i/%i image views created!\n", num_created, vk->num_swapchain_images);
-	} else printf("%i/%i Vulkan image views created!\n", num_created, vk->num_swapchain_images);
+	if(num_created != vk->swapchain.num_images) {
+		printf("ERROR: Only %i/%i image views created!\n", num_created, vk->swapchain.num_images);
+	} else printf("%i/%i Vulkan image views created!\n", num_created, vk->swapchain.num_images);
+
+	result = wsVulkanCreateRenderPass(vk);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan render pass creation failed with result code %i!\n", result);
+	} else printf("Vulkan render pass created!\n");
 
 	result = wsVulkanCreateGraphicsPipeline(vk);
 	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan graphics pipeline creation failed!\n");
+		printf("ERROR: Vulkan graphics pipeline creation failed with result code %i!\n", result);
 	} else printf("Vulkan graphics pipeline created!\n");
 
 	printf("---End Vulkan Initialization!---\n");
@@ -155,23 +164,31 @@ void wsVulkanStop(wsVulkan* vk) {
 		wsVulkanStopDebugMessenger(vk);
 		printf("Vulkan debug messenger destroyed!\n");
 	}
-
+	
+	// Destroy Graphics Pipeline Layout.
+	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);
+	printf("Vulkan pipeline layout destroyed!\n");
+	
+	// Destroy Render Pass!!!
+	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);
+	printf("Vulkan render pass destroyed!\n");
+	
 	// Unload all shaders.
 	wsShaderUnloadAll(&vk->shader);
 	printf("Shaders unloaded!\n");
 
 	// Destroy swap chain image views.
-	for(uint32_t i = 0; i < vk->num_swapchain_images; i++) {
-		vkDestroyImageView(vk->logical_device, vk->swapchain_imageviews[i], NULL);
+	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
+		vkDestroyImageView(vk->logical_device, vk->swapchain.image_views[i], NULL);
 	}
-	free(vk->swapchain_imageviews);
+	free(vk->swapchain.image_views);
 	printf("Vulkan image views destroyed!\n");
 
 	// Destroy swap chain.
-	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain, NULL);
-	free(vk->swapchain_info.formats);
-	free(vk->swapchain_info.present_modes);
-	free(vk->swapchain_images);
+	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain.sc, NULL);
+	free(vk->swapchain.formats);
+	free(vk->swapchain.present_modes);
+	free(vk->swapchain.images);
 	printf("Vulkan swap chain destroyed!\n");
 	
 	// Destroy logical device, surface, & instance!
@@ -183,14 +200,54 @@ void wsVulkanStop(wsVulkan* vk) {
 	printf("Vulkan instance destroyed!\n");
 }
 
+VkResult wsVulkanCreateRenderPass(wsVulkan* vk) {
+	// Specify color attachment details for render pass object.
+	VkAttachmentDescription color_attachment = {};
+	color_attachment.format	= vk->swapchain.image_format;
+	color_attachment.samples= VK_SAMPLE_COUNT_1_BIT;
+	
+	color_attachment.loadOp	= VK_ATTACHMENT_LOAD_OP_CLEAR;
+	color_attachment.storeOp= VK_ATTACHMENT_STORE_OP_STORE;
+	
+	color_attachment.stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	color_attachment.stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	
+	color_attachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
+	color_attachment.finalLayout	= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	
+	
+	// Specify attachment reference for subpass(es).
+	VkAttachmentReference colorattachment_reference = {};
+	colorattachment_reference.attachment= 0;
+	colorattachment_reference.layout	= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	
+	VkSubpassDescription subpass_desc = {};
+	subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	
+	subpass_desc.colorAttachmentCount = 1;
+	subpass_desc.pColorAttachments = &colorattachment_reference;
+	
+	
+	// Create render pass!
+	VkRenderPassCreateInfo renderpass_info = {};
+	renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+
+	renderpass_info.attachmentCount = 1;
+	renderpass_info.pAttachments = &color_attachment;
+	
+	renderpass_info.subpassCount= 1;
+	renderpass_info.pSubpasses	= &subpass_desc;
+	
+	return vkCreateRenderPass(vk->logical_device, &renderpass_info, NULL, &vk->renderpass);
+}
+
 VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID) {
 	// Specify shader module creation info.
 	VkShaderModuleCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	
 	create_info.codeSize = vk->shader.shader_size[shaderID];
 	create_info.pCode = (const uint32_t*)vk->shader.shader_data[shaderID];
-	create_info.pNext = NULL;
-	create_info.flags = 0;
 
 	// Create and return shader module!
 	VkShaderModule module;
@@ -202,23 +259,32 @@ VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID) {
 }
 
 VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
-	// Shader module initialization.
+
+	// ---------------------
+	// CREATE SHADER MODULES
+	// ---------------------
+
+	// Shader data container inside of struct vk.
 	wsShaderInit(&vk->shader);
+	
+	// Load shader bytecode into memory.
 	uint8_t vertID = wsShaderLoad(&vk->shader, "shaders/spir-v/hellotriangle_vert.spv");
 	uint8_t fragID = wsShaderLoad(&vk->shader, "shaders/spir-v/hellotriangle_frag.spv");
+	
+	// Convert shader bytecode into a shader module for Vulkan to work with.
 	VkShaderModule vert_module = wsVulkanCreateShaderModule(vk, vertID);
 	VkShaderModule frag_module = wsVulkanCreateShaderModule(vk, fragID);
-
+	
+	
 	// Initialize vertex shader stage creation info.
 	VkPipelineShaderStageCreateInfo vert_shaderstage_info = {};
 	vert_shaderstage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	vert_shaderstage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	vert_shaderstage_info.pNext = NULL;
-	vert_shaderstage_info.flags = 0;
+	
 	vert_shaderstage_info.pSpecializationInfo = NULL;
 	vert_shaderstage_info.module = vert_module;
 	vert_shaderstage_info.pName = "main";
-
+	
 	// Initialize fragment shader stage creation info.
 	VkPipelineShaderStageCreateInfo frag_shaderstage_info = {};
 	frag_shaderstage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -231,9 +297,164 @@ VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
 
 	VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shaderstage_info, frag_shaderstage_info};
 
-	// Destroy shader modules.
+	// Destroy shader modules cause WE DON NEED EM.
 	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
 	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
+
+
+	// ---------------------
+	// INITIALIZE FIXED-FUNCTION VALUES
+	// ---------------------
+	
+	// Configure vertex data receival info.
+	VkPipelineVertexInputStateCreateInfo vertexinput_info = {};
+	vertexinput_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	
+	vertexinput_info.vertexBindingDescriptionCount	= 0;
+	vertexinput_info.pVertexBindingDescriptions		= NULL;
+	
+	vertexinput_info.vertexAttributeDescriptionCount= 0;
+	vertexinput_info.pVertexAttributeDescriptions	= NULL;
+	
+	
+	// Configure vertex data assembly method.
+	VkPipelineInputAssemblyStateCreateInfo inputassembly_info = {};
+	inputassembly_info.sType	= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputassembly_info.topology	= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;	// We are using triangles for our models here.
+	inputassembly_info.primitiveRestartEnable = VK_FALSE;	// Allows for element buffers for splitting up geometry, reusing vertices, reusing indices, etc.
+	
+	
+	// Configure viewport.
+	VkViewport viewport;// Viewport for stretching & rendering.
+	
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	
+	viewport.width	= (float)vk->swapchain.extent.width;
+	viewport.height	= (float)vk->swapchain.extent.height;
+	
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+	
+	
+	// Configure scissor window for viewport.
+	VkRect2D scissor;	// Scissor rectangle for the viewport.  Defines region in which pixels are stored.
+	
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	
+	scissor.extent = vk->swapchain.extent;
+	
+	
+	// May cause crash when out of scope.  We'll see.
+	// Configure dynamic states that should be allowed to change without reconstructing the whole pipeline.  No performance impact.
+	VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+	VkPipelineDynamicStateCreateInfo dynamicstate_info = {};
+	dynamicstate_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	
+	dynamicstate_info.dynamicStateCount	= 2;
+	dynamicstate_info.pDynamicStates	= dynamic_states;
+	
+	
+	// Configure viewport info.
+	VkPipelineViewportStateCreateInfo viewport_info = {};
+	viewport_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	
+	viewport_info.viewportCount	= 1;
+	viewport_info.scissorCount	= 1;
+	
+	
+	// Configure rasterizer info.
+	VkPipelineRasterizationStateCreateInfo rasterizer_info = {};
+	rasterizer_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer_info.depthClampEnable = VK_FALSE;		// Instead of discarding OOB fragments, should we clamp them?
+	rasterizer_info.rasterizerDiscardEnable = VK_FALSE;	// If this is true, geometry will never be passed through the rasterizing stage.
+	
+	rasterizer_info.polygonMode = VK_POLYGON_MODE_FILL;	// Can also be VK_POLYGON_MODE_LINE, or VK_POLYGON_MODE_POINT.
+	rasterizer_info.lineWidth = 1.0f;						// Enabling the wideLines GPU feature is required for any value above 1.0f.
+	
+	rasterizer_info.cullMode = VK_CULL_MODE_BACK_BIT;	// Back-face culling, baybey!
+	rasterizer_info.frontFace = VK_FRONT_FACE_CLOCKWISE;// Specifies vertex order for faced to be considered front-facing.
+	
+	/* Controls whether rasterizer should modify depth values of a fragment by a constant, based on the fragment's slope, or not at all.  
+		Allegedly, this is sometimes used for shadow mapping. */
+	rasterizer_info.depthBiasEnable			= VK_FALSE;
+	rasterizer_info.depthBiasConstantFactor	= 0.0f;
+	rasterizer_info.depthBiasClamp			= 0.0f;
+	rasterizer_info.depthBiasSlopeFactor	= 0.0f;
+	
+	
+	// Multisampling!  Great for reducing aliasing artifacting along edges of polygons where more than one poly may occupy a single pixel.
+	VkPipelineMultisampleStateCreateInfo multisampling_info = {};
+	multisampling_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	
+	multisampling_info.sampleShadingEnable	= VK_FALSE;
+	multisampling_info.rasterizationSamples	= VK_SAMPLE_COUNT_1_BIT;
+	multisampling_info.minSampleShading		= 1.0f;
+	multisampling_info.pSampleMask = NULL;
+	
+	multisampling_info.alphaToCoverageEnable = VK_FALSE;
+	multisampling_info.alphaToOneEnable = VK_FALSE;
+	
+	
+	// Configure color blending attachment state for the fragment shader.
+	VkPipelineColorBlendAttachmentState colorblend_attachment = {};
+	colorblend_attachment.colorWriteMask= VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	
+	// Should we blend at all?
+	colorblend_attachment.blendEnable	= VK_TRUE;
+	
+	// Color blending.
+	colorblend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorblend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorblend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+	
+	// ALpha blending.
+	colorblend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorblend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorblend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+	
+	
+	// For bitwise color blending.  Automagically disables the first color-blending stage above.
+	VkPipelineColorBlendStateCreateInfo colorblend_info = {};
+	colorblend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	
+	colorblend_info.logicOpEnable = VK_FALSE;
+	colorblend_info.logicOp = VK_LOGIC_OP_COPY;
+	
+	colorblend_info.attachmentCount = 1;
+	colorblend_info.pAttachments = &colorblend_attachment;
+	
+	colorblend_info.blendConstants[0] = 0.0f;
+	colorblend_info.blendConstants[1] = 0.0f;
+	colorblend_info.blendConstants[2] = 0.0f;
+	colorblend_info.blendConstants[3] = 0.0f;
+	
+	
+	// Specify pipeline layout creation info.
+	VkPipelineLayoutCreateInfo pipelinelayout_info = {};
+	pipelinelayout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	
+	pipelinelayout_info.setLayoutCount = 0;
+	pipelinelayout_info.pSetLayouts	= NULL;
+	
+	pipelinelayout_info.pushConstantRangeCount = 0;
+	pipelinelayout_info.pPushConstantRanges	= NULL;
+	
+	// Create pipeline layout!  If unsuccessful, say so and return the result code as an integer.
+	VkResult result = vkCreatePipelineLayout(vk->logical_device, &pipelinelayout_info, NULL, &vk->pipeline_layout);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan pipeline layout creation failed with result code %i!\n", result);
+		return result;
+	} else printf("Vulkan pipeline layout created!\n");
+	
+	
+	
+	// TODO: CREATE GRAPHICS PIPELINE HERE.
+	
+	
+	
+	
 }
 
 // Returns number of image views created successfully.
@@ -241,18 +462,17 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
 	uint32_t num_created = 0;
 
 	// Allocate space for our image views within struct vk.
-	vk->swapchain_imageviews = malloc(vk->num_swapchain_images * sizeof(VkImageView));
+	vk->swapchain.image_views = malloc(vk->swapchain.num_images * sizeof(VkImageView));
 
 	// Create image view for each swap chain image.
-	for(uint32_t i = 0; i < vk->num_swapchain_images; i++) {
+	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
 		VkImageViewCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		create_info.image = vk->swapchain_images[i];
-		create_info.pNext = NULL;
-		create_info.flags = 0;
+		create_info.image = vk->swapchain.images[i];
+		
 		create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		create_info.format = vk->swapchain_imageformat;
-
+		create_info.format = vk->swapchain.image_format;
+		
 		// Stick to default color mapping.
 		create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 		create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -265,8 +485,9 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
 		create_info.subresourceRange.levelCount = 1;	// Mapping!
 		create_info.subresourceRange.baseArrayLayer = 0;
 		create_info.subresourceRange.layerCount = 1;
-
-		VkResult result = vkCreateImageView(vk->logical_device, &create_info, NULL, &vk->swapchain_imageviews[i]);
+		
+		// Create image view for each image view object!
+		VkResult result = vkCreateImageView(vk->logical_device, &create_info, NULL, &vk->swapchain.image_views[i]);
 		if(result != VK_SUCCESS)
 			printf("ERROR: Image view %i not created successfully; code %i!\n", i, result);
 		else num_created++;
@@ -278,59 +499,62 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
 VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	// Initialize swap chain within struct vk.
 	// wsVulkanQuerySwapChainSupport(vk);
-	wsVulkanChooseSwapSurfaceFormat(&vk->swapchain_info);
-	wsVulkanChooseSwapPresentMode(&vk->swapchain_info);
+	wsVulkanChooseSwapSurfaceFormat(&vk->swapchain);
+	wsVulkanChooseSwapPresentMode(&vk->swapchain);
 	wsVulkanChooseSwapExtent(vk);
 
 	// Recommended to add at least 1 extra image to swap chain buffer to reduce wait times during rendering.
-	uint32_t num_images = vk->swapchain_info.capabilities.minImageCount + 2;
-	vk->num_swapchain_images = num_images;
+	uint32_t num_images = vk->swapchain.capabilities.minImageCount + 2;
+	vk->swapchain.num_images = num_images;
 
 	// Specify swap chain creation info.
-	VkSwapchainCreateInfoKHR create_info;
+	VkSwapchainCreateInfoKHR create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	create_info.pNext = NULL;
-	create_info.flags = 0;
 	create_info.surface = vk->surface;
+	
+	// Specify swapchain image view details.
 	create_info.minImageCount = num_images;
-	create_info.imageFormat = vk->swapchain_info.surface_format.format;
-	create_info.imageColorSpace = vk->swapchain_info.surface_format.colorSpace;
-	create_info.imageExtent = vk->swapchain_info.extent;
+	create_info.imageFormat = vk->swapchain.surface_format.format;
+	create_info.imageColorSpace = vk->swapchain.surface_format.colorSpace;
+	create_info.imageExtent = vk->swapchain.extent;
 	create_info.imageArrayLayers = 1;	// Always 1 unless this is a stereoscopic 3D application.
 	create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
+	
+	
 	// Check if queue family indices are unique.
-	uint32_t queue_family_indices[] = {vk->indices.graphics_family, vk->indices.present_family};
-	if(vk->indices.graphics_family != vk->indices.present_family) {
+	uint32_t queue_family_indices[] = {vk->queues.graphics_family, vk->queues.present_family};
+	
+	if(vk->queues.graphics_family != vk->queues.present_family) {
 		create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		create_info.queueFamilyIndexCount = 2;
 		create_info.pQueueFamilyIndices = queue_family_indices;
+	
 	} else {
 		create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		create_info.queueFamilyIndexCount = 0;	// Optional.
 		create_info.pQueueFamilyIndices = NULL;	// Optional.
 	}
-
-	create_info.preTransform = vk->swapchain_info.capabilities.currentTransform;	// Do we want to apply any transformations to our swap chain content?  Nope!
+	
+	
+	create_info.preTransform = vk->swapchain.capabilities.currentTransform;	// Do we want to apply any transformations to our swap chain content?  Nope!
 	create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;	// Do we want to blend our program into other windows in the window system?  No siree!
-	create_info.presentMode = vk->swapchain_info.present_mode;
+	create_info.presentMode = vk->swapchain.present_mode;
 	create_info.clipped = VK_TRUE;	// If another window obscures some pixels from our window, should we ignore drawing them?  Yeah, probably.
 	create_info.oldSwapchain = VK_NULL_HANDLE;	// Reference to old swap chain in case we ever have to create a new one!  NULL for now.
-
-	VkResult result = vkCreateSwapchainKHR(vk->logical_device, &create_info, NULL, &vk->swapchain);
+	
+	// Create swap chain!
+	VkResult result = vkCreateSwapchainKHR(vk->logical_device, &create_info, NULL, &vk->swapchain.sc);
 	
 	// Store swap chain images in struct vk.
-	vkGetSwapchainImagesKHR(vk->logical_device, vk->swapchain, &num_images, NULL);
-	vk->swapchain_images = malloc(num_images * sizeof(VkImage));
-	vkGetSwapchainImagesKHR(vk->logical_device, vk->swapchain, &num_images, vk->swapchain_images);
+	vkGetSwapchainImagesKHR(vk->logical_device, vk->swapchain.sc, &num_images, NULL);
+	vk->swapchain.images = malloc(num_images * sizeof(VkImage));
+	vkGetSwapchainImagesKHR(vk->logical_device, vk->swapchain.sc, &num_images, vk->swapchain.images);
 	
-	// Set current swap chain image format and extent within struct vk.
-	vk->swapchain_imageformat = vk->swapchain_info.surface_format.format;
-	vk->swapchain_presentmode = vk->swapchain_info.present_mode;
-	vk->swapchain_extent = vk->swapchain_info.extent;
+	// Set current swap chain image format for easier access.
+	vk->swapchain.image_format = vk->swapchain.surface_format.format;
 
 	printf("Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
-		vk->swapchain_extent.width, vk->swapchain_extent.height, vk->swapchain_info.surface_format.format, vk->swapchain_presentmode);
+		vk->swapchain.extent.width, vk->swapchain.extent.height, vk->swapchain.surface_format.format, vk->swapchain.present_mode);
 
 	return result;
 }
@@ -338,11 +562,13 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 // Choose a nice resolution to draw swap chain images at.
 uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num < min ? min : num;return t > max ? max : t;}
 void wsVulkanChooseSwapExtent(wsVulkan* vk) {
-	wsVulkanSwapChainInfo* swapchain_info = &vk->swapchain_info;
-	VkSurfaceCapabilitiesKHR* capabilities = &vk->swapchain_info.capabilities;
+	
+	wsVulkanSwapChain* swapchain_info = &vk->swapchain;
+	VkSurfaceCapabilitiesKHR* capabilities = &vk->swapchain.capabilities;
 	
 	if(capabilities->currentExtent.width != UINT32_MAX) {
 		swapchain_info->extent = capabilities->currentExtent;
+		
 	} else {
 		// Query GLFW Window framebuffer size.
 		int width, height;
@@ -355,10 +581,12 @@ void wsVulkanChooseSwapExtent(wsVulkan* vk) {
 }
 
 // Choose a presentation mode for our swap chain drawing surface.
-void wsVulkanChooseSwapPresentMode(wsVulkanSwapChainInfo* swapchain_info) {
+void wsVulkanChooseSwapPresentMode(wsVulkanSwapChain* swapchain_info) {
+	
 	// If we find a presentation mode that works for us, select it and return.
 	for(int32_t i = 0; i < swapchain_info->num_present_modes; i++) {
 		VkPresentModeKHR* current_mode = &swapchain_info->present_modes[i];
+		
 		if(*current_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
 			swapchain_info->present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
 			return;
@@ -370,10 +598,12 @@ void wsVulkanChooseSwapPresentMode(wsVulkanSwapChainInfo* swapchain_info) {
 }
 
 // Choose a format and color space for our swap chain drawing surface.
-void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChainInfo* swapchain_info) {
+void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChain* swapchain_info) {
+	
 	// If we find a format that works for us, select it and return.
 	for(int32_t i = 0; i < swapchain_info->num_formats; i++) {
 		VkSurfaceFormatKHR* current_format = &swapchain_info->formats[i];
+		
 		if(current_format->format == VK_FORMAT_B8G8R8A8_SRGB && current_format->colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 			swapchain_info->surface_format = *current_format;
 			return;
@@ -386,28 +616,28 @@ void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChainInfo* swapchain_info) {
 
 void wsVulkanQuerySwapChainSupport(wsVulkan* vk) {
 	// Query surface details into vk->swapchain_deets.
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physical_device, vk->surface, &vk->swapchain_info.capabilities);
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk->physical_device, vk->surface, &vk->swapchain.capabilities);
 
 	// Query supported surface formats.
 	uint32_t num_formats;
 	
 	vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, NULL);
-	vk->swapchain_info.num_formats = num_formats;
+	vk->swapchain.num_formats = num_formats;
 
 	if(num_formats != 0) {
-		vk->swapchain_info.formats = malloc(num_formats * sizeof(VkSurfaceFormatKHR));
-		vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, vk->swapchain_info.formats);
+		vk->swapchain.formats = malloc(num_formats * sizeof(VkSurfaceFormatKHR));
+		vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physical_device, vk->surface, &num_formats, vk->swapchain.formats);
 	}
 
 	// Query supported presentation modes.
 	uint32_t num_present_modes;
 	
 	vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, NULL);
-	vk->swapchain_info.num_present_modes = num_present_modes;
+	vk->swapchain.num_present_modes = num_present_modes;
 
 	if(num_present_modes != 0) {
-		vk->swapchain_info.present_modes = malloc(num_present_modes * sizeof(VkPresentModeKHR));
-		vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, vk->swapchain_info.present_modes);
+		vk->swapchain.present_modes = malloc(num_present_modes * sizeof(VkPresentModeKHR));
+		vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, vk->swapchain.present_modes);
 	}
 }
 
@@ -420,16 +650,16 @@ VkResult wsVulkanCreateSurface(wsVulkan* vk) {
 VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers) {
 	
 	// Get required queue family indices and store them in vk.
-	wsVulkanFindQueueFamilies(&vk->indices, &vk->physical_device, &vk->surface);
+	wsVulkanFindQueueFamilies(&vk->queues, &vk->physical_device, &vk->surface);
 	
 	// Figure out how many unique queue families we need to initialize.
 	uint8_t num_unique_queue_families;
-	if(vk->indices.graphics_family == vk->indices.present_family)
+	if(vk->queues.graphics_family == vk->queues.present_family)
 		num_unique_queue_families = 1;
 	else num_unique_queue_families = 2;
 	
 	// Store queue family creation infos for later use in binding to logical device creation info.
-	uint32_t unique_queue_family_indices[2] = {vk->indices.graphics_family, vk->indices.present_family};
+	uint32_t unique_queue_family_indices[2] = {vk->queues.graphics_family, vk->queues.present_family};
 	VkDeviceQueueCreateInfo* queue_create_infos = calloc(num_unique_queue_families, sizeof(VkDeviceQueueCreateInfo));
 	
 	// Specify creation info for queue families.
@@ -458,25 +688,28 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 	create_info.pEnabledFeatures = &device_features;
 	create_info.pNext = NULL;
 	
+	
 	// Modern way of handling device-specific validation layers.
 	const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 	create_info.enabledExtensionCount = 1;
 	create_info.ppEnabledExtensionNames = device_extensions;
+	
 	// Device-specific validation layers are deprecated for modern API versions, but required for older versions.
 	if(debug) {
 		create_info.enabledLayerCount = (uint32_t)num_validation_layers;
 		create_info.ppEnabledLayerNames = validation_layers;
 	} else create_info.enabledLayerCount = 0;
 	
+	
 	// Create logical_device and return result!
 	VkResult result = vkCreateDevice(vk->physical_device, &create_info, NULL, &vk->logical_device);
 	
 	// Assign queue handles from logical_device.
-	vkGetDeviceQueue(vk->logical_device, vk->indices.graphics_family, 0, &vk->graphics_queue);
-	vkGetDeviceQueue(vk->logical_device, vk->indices.present_family, 0, &vk->present_queue);
+	vkGetDeviceQueue(vk->logical_device, vk->queues.graphics_family, 0, &vk->queues.graphics_queue);
+	vkGetDeviceQueue(vk->logical_device, vk->queues.present_family, 0, &vk->queues.present_queue);
 	
 	printf("%i unique Vulkan queue families exist; indices are as specified:\n", num_unique_queue_families);
-	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->indices.graphics_family, vk->indices.present_family);
+	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->queues.graphics_family, vk->queues.present_family);
 	
 	// FREE MEMORY!!!
 	free(queue_create_infos);
@@ -485,7 +718,7 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 }
 
 // Checks if all queue families have been found.
-bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices) {
+bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices) {
 	if(!indices->has_graphics_family)
 		return false;
 	if(!indices->has_present_family)
@@ -495,12 +728,15 @@ bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilyIndices* indices) {
 }
 
 // Finds queue families and stores their indices in *indices.
-void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface) {
+void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface) {
+	
 	// Get list of queue families available to us.
 	uint32_t num_queue_families = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &num_queue_families, NULL);
+	
 	VkQueueFamilyProperties* queue_families = malloc(num_queue_families * sizeof(VkQueueFamilyProperties));
 	vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &num_queue_families, queue_families);
+	
 	
 	// These will end up as true once a family is found.
 	indices->has_graphics_family = false;
@@ -516,6 +752,7 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDe
 			indices->graphics_family = i;
 			indices->has_graphics_family = true;
 		}
+		
 		// Check for presentation queue family support.
 		VkBool32 has_present_support = false;
 		vkGetPhysicalDeviceSurfaceSupportKHR(*physical_device, i, *surface, &has_present_support);
@@ -532,22 +769,26 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilyIndices *indices, VkPhysicalDe
 
 // Pick an appropriate physical device for Vulkan to utilize.  Returns whether or not one was found.
 bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
+	
 	// Get list of physical devices and store in GPUs[].
 	uint32_t num_GPUs = 0;
 	vkEnumeratePhysicalDevices(vk->instance, &num_GPUs, NULL);
+	
 	if(num_GPUs <= 0) {
 		return false;
 	}
+	
 	VkPhysicalDevice* GPUs = malloc(num_GPUs * sizeof(VkPhysicalDevice));
 	vkEnumeratePhysicalDevices(vk->instance, &num_GPUs, GPUs);
+	
 	
 	// Pick GPU with highest score.
 	int32_t max_score = -1;
 	int32_t ndx_GPU = -1;
-
+	
 	printf("Rating %i GPU(s)...\n", num_GPUs);
-
-	for(int32_t i = 0; i < num_GPUs; i++) {
+	
+	for(int32_t i = 0; i < num_GPUs; i++) {	
 		printf("GPU %i: \t", i);
 
 		// Make sure we are checking current GPU's suitability;
@@ -576,39 +817,48 @@ bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
 
 // Verify if physical device is suitable for our use-cases and score it based on functionality.
 int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device) {
-	enum GPU_INCOMPATIBILITy_CODES {NO_GEOMETRY_SHADER = INT_MIN, NO_GRAPHICS_FAMILY, NO_PRESENTATION_FAMILY, NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT};
+	enum GPU_INCOMPATIBILITY_CODES {NO_GEOMETRY_SHADER = INT_MIN, NO_GRAPHICS_FAMILY, NO_PRESENTATION_FAMILY, NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT};
 	int32_t score = 0;
 	
+	
+	// Queue for device properties.
 	VkPhysicalDeviceProperties device_properties;
-	VkPhysicalDeviceFeatures device_features;
 	vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
+	
+	// Queue for device features.
+	VkPhysicalDeviceFeatures device_features;
 	vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
+	
 	
 	// Program cannot function without geometry shaders!
 	if(!device_features.geometryShader)
 		return NO_GEOMETRY_SHADER;
 	
+	
 	// Program cannot function without certain queue families.
-	wsVulkanQueueFamilyIndices indices;
+	wsVulkanQueueFamilies indices;
 	wsVulkanFindQueueFamilies(&indices, physical_device, &vk->surface);
 	if(!indices.has_graphics_family)
 		return NO_GRAPHICS_FAMILY;
 	if(!indices.has_present_family)
 		return NO_PRESENTATION_FAMILY;
 	
+	
 	// Program cannot function without certain device-specific extensions.
 	if(!wsVulkanCheckDeviceExtensionSupport(physical_device))
 		return NO_DEVICE_EXTENSION_SUPPORT;
 	
+	
 	// Program cannot function without proper swapchain support!
 	wsVulkanQuerySwapChainSupport(vk);
-	if(vk->swapchain_info.num_formats <= 0 || vk->swapchain_info.num_present_modes <= 0)
+	if(vk->swapchain.num_formats <= 0 || vk->swapchain.num_present_modes <= 0)
 		return NO_SWAPCHAIN_SUPPORT;
-
+	
+	
 	// If these are the same queue family, this could increase performance.
 	score += indices.graphics_family == indices.present_family ? 500 : 0;
 	
-	// Prefer discrete GPU.  If the max texture size is much lower on the discrete card, it might be old and suck.
+	// Prefer discrete GPU.  If the max texture size is much lower on the discrete card, it might be too old and suck.
 	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
 	score += device_properties.limits.maxImageDimension2D;
 	
@@ -616,11 +866,14 @@ int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_devi
 }
 
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device) {
+	
 	// Query number of extensions available and their names.
 	uint32_t num_available_extensions;
 	vkEnumerateDeviceExtensionProperties(*physical_device, NULL, &num_available_extensions, NULL);
+	
 	VkExtensionProperties* available_extensions = malloc(num_available_extensions * sizeof(VkExtensionProperties));
 	vkEnumerateDeviceExtensionProperties(*physical_device, NULL, &num_available_extensions, available_extensions);
+
 
 	// Required device-specific extensions to verify we have access to.
 	uint32_t num_required_extensions = 1;
@@ -637,6 +890,7 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device) {
 		
 		for(uint32_t j = 0; j < num_available_extensions; j++) {
 			if(strcmp(required_extensions[i], available_extensions[j].extensionName) == 0) {
+			
 				has_found_extension = true;
 				break;
 			}
@@ -655,7 +909,7 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device) {
 
 VkResult wsVulkanInitDebugMessenger(wsVulkan* vk) {
 	// Populate creation info for debug messenger.
-	VkDebugUtilsMessengerCreateInfoEXT create_info;
+	VkDebugUtilsMessengerCreateInfoEXT create_info = {};
 	wsVulkanPopulateDebugMessengerCreationInfo(&create_info);
 	
 	// Create debug messenger!
@@ -709,19 +963,19 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 void wsVulkanPopulateDebugMessengerCreationInfo(VkDebugUtilsMessengerCreateInfoEXT* create_info) {
 	// Specify creation info for debug messenger.
 	create_info->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+	
 	// Specify which messages the debug callback function should be called for.
 	create_info->messageSeverity = // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+	
 	// Specify which messages the debug callback function should be notified about.
 	create_info->messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | 
 		VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+	
 	// Debug callback function pointer.
 	create_info->pfnUserCallback = &wsVulkanDebugCallback;
-	// Unnecessary, but will get warning without these two assignments.
-	create_info->pUserData = NULL;
-	create_info->flags = 0;
 }
 
 // Adds debug extensions to required extension list.
@@ -763,11 +1017,14 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 		printf("\t%s\n", required_extensions[i]);
 	}
 	
+	
 	// Fetch required extensions & required extension count.
 	uint32_t num_available_extensions = 0;
 	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, NULL);
+	
 	VkExtensionProperties* available_extensions = malloc(num_available_extensions * sizeof(VkExtensionProperties));
 	vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, available_extensions);
+	
 	
 	// Check that required extensions are supported.
 	bool has_all_extensions = true;
@@ -776,6 +1033,7 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 		
 		for(int32_t j = 0; j < num_available_extensions; j++) {
 			if(strcmp(required_extensions[i], available_extensions[j].extensionName) == 0) {
+				
 				extension_found = true;
 				break;
 			}
@@ -803,23 +1061,29 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 
 // For internal use only.
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
+	
 	// Who knows if I need to free all this memory!?!?  Not me!
 	size_t num_required_layers = 1;
 	char** required_layers = malloc(num_required_layers * sizeof(char*));
+	
 	required_layers[0] = malloc(sizeof("VK_LAYER_KHRONOS_validation") * sizeof(char));
 	required_layers[0] = "VK_LAYER_KHRONOS_validation\0";
+	
 	
 	// Get available validation layers.
 	uint32_t num_available_layers;
 	vkEnumerateInstanceLayerProperties(&num_available_layers, NULL);
+	
 	VkLayerProperties* available_layers = malloc(num_available_layers * sizeof(VkLayerProperties));
 	vkEnumerateInstanceLayerProperties(&num_available_layers, available_layers);
 	
+	// Search for each required layer in our list available_layers.
 	for(int32_t i = 0; i < num_required_layers; i++) {
 		bool layer_found = false;
 		
 		for(int32_t j = 0; j < num_available_layers; j++) {
 			if(strcmp(required_layers[i], available_layers[j].layerName) == 0) {
+				
 				layer_found = true;
 				break;
 			}
@@ -832,15 +1096,19 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	// If we have all required layers available for use.
 	create_info->enabledLayerCount = num_required_layers;
 	create_info->ppEnabledLayerNames = (const char**)required_layers;
+	
 	printf("%i Vulkan validation layer(s) required: \n", num_required_layers);
+	
 	for(int32_t i = 0; i < num_required_layers; i++) {
 		printf("\t%s\n", required_layers[i]);
 	}
+	
 	
 	// FREE MEMORY!!!
 	free(available_layers);
 	// I believe this sometimes causes validation layers to cry.
 	// free(required_layers);
+	
 	
 	return true;
 }

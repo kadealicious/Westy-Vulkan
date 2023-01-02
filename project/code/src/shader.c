@@ -55,7 +55,7 @@ uint8_t wsShaderLoad(wsShader* shd, const char* path) {
     
     // Used to query if we have unloaded shader yet.
     shd->isloaded[current_shaderID] = true;
-    printf("Shader ID %i loaded!\n", current_shaderID);
+    printf("Shader ID %i loaded from path \"%s\"!\n", current_shaderID, path);
 
     return current_shaderID++;
 }

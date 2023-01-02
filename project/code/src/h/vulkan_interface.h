@@ -9,32 +9,41 @@
 
 #define NUM_MAX_PIPELINES 100
 
-// Swap chain support details.
-typedef struct wsVulkanSwapChainInfo {
-	VkSurfaceCapabilitiesKHR capabilities;
-	VkExtent2D extent;
-
-	VkSurfaceFormatKHR surface_format;
-	VkSurfaceFormatKHR* formats;
-	uint32_t num_formats;
-
-	VkPresentModeKHR present_mode;
-	VkPresentModeKHR* present_modes;
-	uint32_t num_present_modes;
-
-} wsVulkanSwapChainInfo;
-
 // Queue family storage.
-typedef struct wsVulkanQueueFamilyIndices {
+typedef struct wsVulkanQueueFamilies {
 	// Used for drawing graphics!
-	uint32_t graphics_family;
-	bool has_graphics_family;
+	uint32_t graphics_family;// Index of graphical queue family.
+	bool has_graphics_family;// Have we found a graphical queue family?
+	VkQueue graphics_queue;	// Graphics queue family.
 	
 	// Used for presenting surfaces to the window.
-	uint32_t present_family;
-	bool has_present_family;
+	uint32_t present_family;// Index of presentation queue family.
+	bool has_present_family;// Have we found a presentation queue family?
+	VkQueue present_queue;	// Presentation queue family.
 	
-} wsVulkanQueueFamilyIndices;
+} wsVulkanQueueFamilies;
+
+// Swap chain support details.
+typedef struct wsVulkanSwapChain {
+	VkSwapchainKHR sc;	// Actual Vulkan swap chain object.
+	
+	VkExtent2D extent;
+	uint32_t num_images;	// Number of images allowed for swapchain buffering.  Default is 4.
+	VkImage* images;		// Pointer to array of swap chain images.
+	VkImageView* image_views;	// Specifies how we use and view each image within the swap chain.
+	VkFormat image_format;	// Specifies image format for swapchain to use.
+
+	VkSurfaceFormatKHR surface_format;	// Selected surface format.
+	VkSurfaceFormatKHR* formats;		// List of supported surface formats.
+	uint32_t num_formats;				// Number of supported surface formats.
+
+	VkPresentModeKHR present_mode;	// Selected presentation mode.
+	VkPresentModeKHR* present_modes;// List of supported presentation modes.
+	uint32_t num_present_modes;		// Number of supported presentation modes.
+	
+	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
+
+} wsVulkanSwapChain;
 
 // Vulkan object management.
 typedef struct wsVulkan {
@@ -44,22 +53,15 @@ typedef struct wsVulkan {
 	VkDevice			logical_device;		// Primary logical device used to interface with the physical device.
 	VkDebugUtilsMessengerEXT debug_messenger;	// Main debug messenger.
 
-	wsVulkanQueueFamilyIndices indices;	// Queue family indices.
-	VkQueue graphics_queue;				// Queue for submitting graphical commands.
-	VkQueue present_queue;				// Queue for submitting presentation commands.
+	wsVulkanQueueFamilies queues;	// Contains all queue data.
 
-	VkSwapchainKHR swapchain;			// Swap chain.
-	uint32_t num_swapchain_images;
-	VkImage* swapchain_images;			// Pointer to array of (4) swap chain images.
-	VkImageView* swapchain_imageviews;	// How do we view/use each image in the swap chain?
-	VkFormat swapchain_imageformat;		// What image format is our swap chain using?
-	VkPresentModeKHR swapchain_presentmode;	// Stores presentation mode of swap chain.
-	VkExtent2D swapchain_extent;		// What is the resolution of the swap chain images?
-	wsVulkanSwapChainInfo swapchain_info;	// Struct containing swapchain capabilities, surface formats, and presentation modes.
+	wsVulkanSwapChain swapchain;	// Contains all swapchain data.
 	
+	VkRenderPass renderpass;	// Contains the render pass data.
+	VkPipelineLayout pipeline_layout;	// Contains the pipeline layout data.
 	uint8_t pipelineIDs[NUM_MAX_PIPELINES];	// Holds IDs of all graphics pipelines.
 	wsShader shader;	// Used for loading and interfacing with shaders.
-
+	
 	uint8_t windowID;	// Used for interfacing with GLFW window.
 } wsVulkan;
 
