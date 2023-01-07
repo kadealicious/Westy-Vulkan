@@ -165,7 +165,9 @@ void wsVulkanStop(wsVulkan* vk) {
 		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
-	// Destroy Graphics Pipeline Layout.
+	// Destroy Graphics Pipeline & Pipeline Layout.
+	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);
+	printf("Vulkan graphics pipeline destroyed!\n");
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);
 	printf("Vulkan pipeline layout destroyed!\n");
 	
@@ -295,11 +297,8 @@ VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
 	frag_shaderstage_info.module = frag_module;
 	frag_shaderstage_info.pName = "main";
 
+	// NOTE: Modules destroyed at end of function.
 	VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shaderstage_info, frag_shaderstage_info};
-
-	// Destroy shader modules cause WE DON NEED EM.
-	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
-	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
 
 
 	// ---------------------
@@ -431,6 +430,10 @@ VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
 	colorblend_info.blendConstants[3] = 0.0f;
 	
 	
+	// ---------------------
+	// CREATE PIPELINE & LAYOUT.
+	// ---------------------
+	
 	// Specify pipeline layout creation info.
 	VkPipelineLayoutCreateInfo pipelinelayout_info = {};
 	pipelinelayout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -448,13 +451,42 @@ VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
 		return result;
 	} else printf("Vulkan pipeline layout created!\n");
 	
+	// Specify graphics pipeline creation info.
+	VkGraphicsPipelineCreateInfo pipeline_info = {};
+	pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	
+	// Shader stages.
+	pipeline_info.stageCount = 2;
+	pipeline_info.pStages = &shader_stages[0];
 	
-	// TODO: CREATE GRAPHICS PIPELINE HERE.
+	// Pointers to creation info structs.
+	pipeline_info.pVertexInputState = &vertexinput_info;
+	pipeline_info.pInputAssemblyState = &inputassembly_info;
+	pipeline_info.pViewportState = &viewport_info;
+	pipeline_info.pRasterizationState = &rasterizer_info;
+	pipeline_info.pMultisampleState = &multisampling_info;
+	pipeline_info.pDepthStencilState = NULL;
+	pipeline_info.pColorBlendState = &colorblend_info;
+	pipeline_info.pDynamicState = &dynamicstate_info;
 	
+	// Set layout.
+	pipeline_info.layout = vk->pipeline_layout;
 	
+	// Set render pass storage location within vk struct.
+	pipeline_info.renderPass = vk->renderpass;
+	pipeline_info.subpass = 0;
 	
+	// Specify if we should "derive" from a parent pipeline for creation.
+	pipeline_info.basePipelineHandle = NULL;
+	pipeline_info.basePipelineIndex = -1;
 	
+	result = vkCreateGraphicsPipelines(vk->logical_device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &vk->pipeline);
+	
+	// Destroy shader modules cause WE DON NEED EM NO MO.
+	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
+	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
+	
+	return result;
 }
 
 // Returns number of image views created successfully.

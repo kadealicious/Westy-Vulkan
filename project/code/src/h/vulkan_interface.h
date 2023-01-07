@@ -59,6 +59,7 @@ typedef struct wsVulkan {
 	
 	VkRenderPass renderpass;	// Contains the render pass data.
 	VkPipelineLayout pipeline_layout;	// Contains the pipeline layout data.
+	VkPipeline pipeline;	// Contains all graphics pipeline data.
 	uint8_t pipelineIDs[NUM_MAX_PIPELINES];	// Holds IDs of all graphics pipelines.
 	wsShader shader;	// Used for loading and interfacing with shaders.
 	
