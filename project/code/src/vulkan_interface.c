@@ -34,6 +34,7 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing to the screen.
 VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass.
 VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
+VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk);		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
 VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Queue family management.
@@ -64,9 +65,11 @@ void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	printf("---Begin Vulkan Initialization!---\n");
 
+	// Specify which window we will be rendering to.
 	vk->windowID = windowID;
 
-	// Set application info.
+
+	// Specify application info and store inside struct create_info.
 	VkApplicationInfo app_info;
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	app_info.pApplicationName = "Westy";
@@ -78,16 +81,13 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	app_info.apiVersion = VK_API_VERSION_1_0;
 	app_info.pNext = NULL;
 	
-	
-	// Set application info within create_info struct.
 	VkInstanceCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	create_info.pApplicationInfo = &app_info;
 	
+	
 	// Check that we have all the required extensions for Vulkan.
-	if(!wsVulkanEnableRequiredExtensions(&create_info)) {
-		printf("\tERROR: Not all GLFW-required Vulkan extensions are supported!\n");
-	} else printf("\tAll GLFW-required Vulkan extensions are supported!\n");
+	wsVulkanEnableRequiredExtensions(&create_info);
 	
 	// Enable Vulkan validation layers if in debug mode.
 	create_info.enabledLayerCount = 0;
@@ -95,11 +95,9 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	// If debug, do debug things.  If debug, we will need this struct in a moment for scope-related reasons in vkCreateInstance().
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {};
 	if(debug) {
-		if(!wsVulkanEnableValidationLayers(&create_info)) {
-			printf("\tERROR: required Vulkan validation layers NOT supported!\n");
-		} else printf("\tRequired Vulkan validation layers are supported!\n");
+		wsVulkanEnableValidationLayers(&create_info);
 		
-		// This allows the debug messenger to debug vkCreateInstance().  Pretty important stuff!
+		// This allows the debug messenger to debug vkCreateInstance(), as opposed to skipping that part.  Pretty important stuff!
 		wsVulkanPopulateDebugMessengerCreationInfo(&debug_create_info);
 		create_info.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debug_create_info;
 	}
@@ -110,50 +108,22 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 		printf("ERROR: Vulkan instance creation failed with result code %i!\n", result);
 	else printf("Vulkan instance created!\n");
 	
-	// Self-explanatory.  Used for receiving and sending debug messages to stdout.
+	// Used for communicating when something has gone awry!
 	if(debug) {
-		result = wsVulkanInitDebugMessenger(vk);
-		if(result != VK_SUCCESS) {
-			printf("ERROR: Vulkan debug messenger creation failed with result code %i!\n", result);
-		} else printf("Vulkan debug messenger created!\n");
+		wsVulkanInitDebugMessenger(vk);
 	}
 	
-	// Window surface creation procedure.
-	result = wsVulkanCreateSurface(vk);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan surface creation for window %i failed with result code %i!\n", vk->windowID, result);
-	} else printf("Vulkan surface created for window %i!\n", vk->windowID);
+	wsVulkanCreateSurface(vk);
 	
-	// Find best-suited physical device.
-	if(!wsVulkanPickPhysicalDevice(vk)) {
-		printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
-	} else printf("Found GPU with proper Vulkan support!\n");
+	// Physical device is interfaced with via the logical device.
+	wsVulkanPickPhysicalDevice(vk);
+	wsVulkanCreateLogicalDevice(vk, create_info.enabledLayerCount, create_info.ppEnabledLayerNames);
 	
-	// Create logical device for interfacing with physical device.
-	result = wsVulkanCreateLogicalDevice(vk, create_info.enabledLayerCount, create_info.ppEnabledLayerNames);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
-	} else printf("Vulkan logical device created!\n");
-	
-	result = wsVulkanCreateSwapChain(vk);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan swap chain creation failed with result code %i!\n", result);
-	} else printf("Vulkan swap chain created!\n");
-
-	uint32_t num_created = wsVulkanCreateImageViews(vk);
-	if(num_created != vk->swapchain.num_images) {
-		printf("ERROR: Only %i/%i image views created!\n", num_created, vk->swapchain.num_images);
-	} else printf("%i/%i Vulkan image views created!\n", num_created, vk->swapchain.num_images);
-
-	result = wsVulkanCreateRenderPass(vk);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan render pass creation failed with result code %i!\n", result);
-	} else printf("Vulkan render pass created!\n");
-
-	result = wsVulkanCreateGraphicsPipeline(vk);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan graphics pipeline creation failed with result code %i!\n", result);
-	} else printf("Vulkan graphics pipeline created!\n");
+	wsVulkanCreateSwapChain(vk);		// Swap chain is in charge of swapping images to the screen when they are needed.
+	wsVulkanCreateImageViews(vk);		// Image views describe how we will use, write-to, and read each image.
+	wsVulkanCreateRenderPass(vk);
+	wsVulkanCreateGraphicsPipeline(vk);	// Graphics pipeline combines all created objects and information into one abstraction for working with.
+	wsVulkanCreateFrameBuffers(vk);		// Creates framebuffer objects for interfacing with image view attachments.
 
 	printf("---End Vulkan Initialization!---\n");
 }
@@ -162,7 +132,6 @@ void wsVulkanStop(wsVulkan* vk) {
 	// If in debug mode, destroy debug messenger.
 	if(debug) {
 		wsVulkanStopDebugMessenger(vk);
-		printf("Vulkan debug messenger destroyed!\n");
 	}
 	
 	// Destroy Graphics Pipeline & Pipeline Layout.
@@ -171,13 +140,17 @@ void wsVulkanStop(wsVulkan* vk) {
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);
 	printf("Vulkan pipeline layout destroyed!\n");
 	
-	// Destroy Render Pass!!!
+	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
+		vkDestroyFramebuffer(vk->logical_device, vk->swapchain.framebuffers[i], NULL);
+	}
+	free(vk->swapchain.framebuffers);
+	printf("Vulkan framebuffers destroyed!\n");
+	
 	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);
 	printf("Vulkan render pass destroyed!\n");
 	
 	// Unload all shaders.
 	wsShaderUnloadAll(&vk->shader);
-	printf("Shaders unloaded!\n");
 
 	// Destroy swap chain image views.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
@@ -200,6 +173,34 @@ void wsVulkanStop(wsVulkan* vk) {
 	printf("Vulkan surface destroyed!\n");
 	vkDestroyInstance(vk->instance, NULL);
 	printf("Vulkan instance destroyed!\n");
+}
+
+VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk) {
+	
+	VkResult result;
+	vk->swapchain.framebuffers = malloc(vk->swapchain.num_images * sizeof(VkFramebuffer));
+	
+	for(int i = 0; i < vk->swapchain.num_images; i++) {
+		VkImageView attachments[] = {vk->swapchain.image_views[i]};
+		
+		VkFramebufferCreateInfo framebuffer_info = {};
+		framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebuffer_info.renderPass = vk->renderpass;
+		framebuffer_info.attachmentCount = 1;
+		framebuffer_info.pAttachments = attachments;
+		framebuffer_info.width = vk->swapchain.extent.width;
+		framebuffer_info.height = vk->swapchain.extent.height;
+		framebuffer_info.layers = 1;
+		
+		result = vkCreateFramebuffer(vk->logical_device, &framebuffer_info, NULL, &vk->swapchain.framebuffers[i]);
+		if(result != VK_SUCCESS) {
+			printf("ERROR: Vulkan framebuffer creation %i/%i failed with result code %i!\n", i, vk->swapchain.num_images, result);
+			break;
+		}
+	}
+	
+	printf("%i/%i Vulkan framebuffers created!\n", vk->swapchain.num_images, vk->swapchain.num_images);
+	return result;
 }
 
 VkResult wsVulkanCreateRenderPass(wsVulkan* vk) {
@@ -240,7 +241,11 @@ VkResult wsVulkanCreateRenderPass(wsVulkan* vk) {
 	renderpass_info.subpassCount= 1;
 	renderpass_info.pSubpasses	= &subpass_desc;
 	
-	return vkCreateRenderPass(vk->logical_device, &renderpass_info, NULL, &vk->renderpass);
+	VkResult result = vkCreateRenderPass(vk->logical_device, &renderpass_info, NULL, &vk->renderpass);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan render pass creation failed with result code %i!\n", result);
+	} else printf("Vulkan render pass created!\n");
+	return result;
 }
 
 VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID) {
@@ -486,6 +491,9 @@ VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
 	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
 	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
 	
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan graphics pipeline creation failed with result code %i!\n", result);
+	} else printf("Vulkan graphics pipeline created!\n");
 	return result;
 }
 
@@ -525,6 +533,9 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
 		else num_created++;
 	}
 
+	if(num_created != vk->swapchain.num_images) {
+		printf("ERROR: Only %i/%i image views created!\n", num_created, vk->swapchain.num_images);
+	} else printf("%i/%i Vulkan image views created!\n", num_created, vk->swapchain.num_images);
 	return num_created;
 }
 
@@ -587,7 +598,10 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 
 	printf("Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
 		vk->swapchain.extent.width, vk->swapchain.extent.height, vk->swapchain.surface_format.format, vk->swapchain.present_mode);
-
+	
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan swap chain creation failed with result code %i!\n", result);
+	} else printf("Vulkan swap chain created!\n");
 	return result;
 }
 
@@ -675,7 +689,13 @@ void wsVulkanQuerySwapChainSupport(wsVulkan* vk) {
 
 // Creates a surface bound to our GLFW window.
 VkResult wsVulkanCreateSurface(wsVulkan* vk) {
-	return glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
+	
+	VkResult result = glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan surface creation for window %i failed with result code %i!\n", vk->windowID, result);
+	} else printf("Vulkan surface created for window %i!\n", vk->windowID);
+	
+	return result;
 }
 
 // Creates a logical device to interface with the physical one.
@@ -746,6 +766,10 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 	// FREE MEMORY!!!
 	free(queue_create_infos);
 	
+	
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
+	} else printf("Vulkan logical device created!\n");
 	return result;
 }
 
@@ -841,8 +865,13 @@ bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
 		
 		// TODO: Make this list the properties of chosen GPU.
 		
+		printf("Found GPU with proper Vulkan support!\n");
 		return true;
-	} else return false;
+		
+	} else {
+		printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
+		return false;
+	}
 	
 	// Don't free GPU list so that we can allow user to swap GPUs in settings later.
 }
@@ -945,11 +974,17 @@ VkResult wsVulkanInitDebugMessenger(wsVulkan* vk) {
 	wsVulkanPopulateDebugMessengerCreationInfo(&create_info);
 	
 	// Create debug messenger!
-	return wsVulkanCreateDebugUtilsMessengerEXT(vk->instance, &create_info, NULL, &vk->debug_messenger);
+	VkResult result = wsVulkanCreateDebugUtilsMessengerEXT(vk->instance, &create_info, NULL, &vk->debug_messenger);
+	if(result != VK_SUCCESS) {
+			printf("ERROR: Vulkan debug messenger creation failed with result code %i!\n", result);
+	} else printf("Vulkan debug messenger created!\n");
+	
+	return result;
 }
 
 void wsVulkanStopDebugMessenger(wsVulkan* vk) {
 	wsVulkanDestroyDebugUtilsMessengerEXT(vk->instance, vk->debug_messenger, NULL);
+	printf("Vulkan debug messenger destroyed!\n");
 }
 
 // Vulkan proxy function; Create debug messenger.
@@ -1088,6 +1123,11 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 	// NEVER FREE REQUIRED_EXTENSIONS!  GLFW guarantees pointer validity for lifetime of program.  Breaks non-debug mode.  Oopsie daisies!
 	// free(required_extensions);
 	
+	
+	if(!has_all_extensions) {
+		printf("\tERROR: Not all GLFW-required Vulkan extensions are supported!\n");
+	} else printf("\tAll GLFW-required Vulkan extensions are supported!\n");
+	
 	return has_all_extensions;
 }
 
@@ -1121,8 +1161,10 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 			}
 		}
 		
-		if(!layer_found)
+		if(!layer_found) {
+			printf("\tERROR: required Vulkan validation layers NOT supported!\n");
 			return false;
+		}
 	}
 	
 	// If we have all required layers available for use.
@@ -1141,6 +1183,6 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	// I believe this sometimes causes validation layers to cry.
 	// free(required_layers);
 	
-	
+	printf("\tRequired Vulkan validation layers are supported!\n");
 	return true;
 }

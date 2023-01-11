@@ -25,13 +25,14 @@ typedef struct wsVulkanQueueFamilies {
 
 // Swap chain support details.
 typedef struct wsVulkanSwapChain {
-	VkSwapchainKHR sc;	// Actual Vulkan swap chain object.
+	VkSwapchainKHR sc;			// Actual Vulkan swap chain object.
+	VkFramebuffer* framebuffers;// Stores framebuffers for rendering images to the swap chain!
 	
 	VkExtent2D extent;
-	uint32_t num_images;	// Number of images allowed for swapchain buffering.  Default is 4.
-	VkImage* images;		// Pointer to array of swap chain images.
+	uint32_t num_images;		// Number of images allowed for swapchain buffering.  Default is 4.
+	VkImage* images;			// Pointer to array of swap chain images.
 	VkImageView* image_views;	// Specifies how we use and view each image within the swap chain.
-	VkFormat image_format;	// Specifies image format for swapchain to use.
+	VkFormat image_format;		// Specifies image format for swapchain to use.
 
 	VkSurfaceFormatKHR surface_format;	// Selected surface format.
 	VkSurfaceFormatKHR* formats;		// List of supported surface formats.

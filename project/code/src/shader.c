@@ -61,12 +61,15 @@ uint8_t wsShaderLoad(wsShader* shd, const char* path) {
 }
 
 void wsShaderUnloadAll(wsShader* shd) {
+    
     for(uint8_t i = 0; i < NUM_MAX_SHADERS; i++) {
         wsShaderUnload(shd, i);
     }
+    printf("Shaders unloaded!\n");
 }
 
 void wsShaderUnload(wsShader* shd, uint8_t shaderID) {
+    
     if(shd->isloaded[shaderID]) {
         free(shd->shader_data[shaderID]);
         shd->isloaded[shaderID] = false;
