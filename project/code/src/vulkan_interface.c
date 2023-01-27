@@ -35,6 +35,7 @@ VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing
 VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass.
 VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
 VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk);		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
+VkResult wsVulkanCreateCommandPool(wsVulkan* vk);		// Creates command pool that manages memory for command buffers.
 VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Queue family management.
@@ -124,6 +125,21 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	wsVulkanCreateRenderPass(vk);
 	wsVulkanCreateGraphicsPipeline(vk);	// Graphics pipeline combines all created objects and information into one abstraction for working with.
 	wsVulkanCreateFrameBuffers(vk);		// Creates framebuffer objects for interfacing with image view attachments.
+	
+	wsVulkanCreateCommandPool(vk);
+	
+	
+	/*
+	
+	
+	Resume at "Command buffer allocation" here: https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Command_buffers
+	
+	
+	
+	*/
+	
+	
+	
 
 	printf("---End Vulkan Initialization!---\n");
 }
@@ -133,6 +149,9 @@ void wsVulkanStop(wsVulkan* vk) {
 	if(debug) {
 		wsVulkanStopDebugMessenger(vk);
 	}
+	
+	vkDestroyCommandPool(vk->logical_device, vk->commandpool, NULL);
+	printf("Vulkan command pool destroyed!\n");
 	
 	// Destroy Graphics Pipeline & Pipeline Layout.
 	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);
@@ -173,6 +192,23 @@ void wsVulkanStop(wsVulkan* vk) {
 	printf("Vulkan surface destroyed!\n");
 	vkDestroyInstance(vk->instance, NULL);
 	printf("Vulkan instance destroyed!\n");
+}
+
+VkResult wsVulkanCreateCommandPool(wsVulkan* vk) {
+	
+	// Create command pool.
+	VkCommandPoolCreateInfo pool_info = {};
+	pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	pool_info.queueFamilyIndex = vk->queues.graphics_family;	// Undefined if graphics family is not assigned/is negative.
+	
+	VkResult result = vkCreateCommandPool(vk->logical_device, &pool_info, NULL, &vk->commandpool);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan command pool creation failed with result code %i!\n", result);
+	} else {
+		printf("Vulkan command pool created!\n", result);
+	}
+	return result;
 }
 
 VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk) {
