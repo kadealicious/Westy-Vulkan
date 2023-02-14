@@ -12,12 +12,12 @@
 // Queue family storage.
 typedef struct wsVulkanQueueFamilies {
 	// Used for drawing graphics!
-	uint32_t graphics_family;// Index of graphical queue family.
+	uint32_t ndx_graphics_family;// Index of graphical queue family.
 	bool has_graphics_family;// Have we found a graphical queue family?
 	VkQueue graphics_queue;	// Graphics queue family.
 	
 	// Used for presenting surfaces to the window.
-	uint32_t present_family;// Index of presentation queue family.
+	uint32_t ndx_present_family;// Index of presentation queue family.
 	bool has_present_family;// Have we found a presentation queue family?
 	VkQueue present_queue;	// Presentation queue family.
 	
@@ -55,13 +55,15 @@ typedef struct wsVulkan {
 	VkDebugUtilsMessengerEXT debug_messenger;	// Main debug messenger.
 
 	wsVulkanQueueFamilies queues;	// Contains all queue data.
-
-	wsVulkanSwapChain swapchain;	// Contains all swapchain data.
 	
+	VkCommandPool	commandpool;	// Pool for queueing commands and sending to Vulkan for execution.
+	VkCommandBuffer	commandbuffer;	// 
+	
+	wsVulkanSwapChain swapchain;	// Contains all swapchain data.
 	VkRenderPass renderpass;	// Contains the render pass data.
 	VkPipelineLayout pipeline_layout;	// Contains the pipeline layout data.
 	VkPipeline pipeline;	// Contains all graphics pipeline data.
-	uint8_t pipelineIDs[NUM_MAX_PIPELINES];	// Holds IDs of all graphics pipelines.
+	uint8_t pipelineIDs[NUM_MAX_PIPELINES];	// Holds IDs of all graphics pipelines. // TODO: REMOVE THIS!!!
 	wsShader shader;	// Used for loading and interfacing with shaders.
 	
 	uint8_t windowID;	// Used for interfacing with GLFW window.

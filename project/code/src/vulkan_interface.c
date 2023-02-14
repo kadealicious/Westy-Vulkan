@@ -35,6 +35,9 @@ VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing
 VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass.
 VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
 VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk);		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
+VkResult wsVulkanCreateCommandPool(wsVulkan* vk);		// Create command pool for queueing commands to Vulkan.
+VkResult wsVulkanCreateCommandBuffer(wsVulkan* vk);		// Creates command buffer for holding commands.
+VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, uint32_t img_ndx);		// Records commands into a buffer.
 VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Queue family management.
@@ -124,6 +127,9 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	wsVulkanCreateRenderPass(vk);
 	wsVulkanCreateGraphicsPipeline(vk);	// Graphics pipeline combines all created objects and information into one abstraction for working with.
 	wsVulkanCreateFrameBuffers(vk);		// Creates framebuffer objects for interfacing with image view attachments.
+	
+	wsVulkanCreateCommandPool(vk);		// Creates command pool, which is used for queueing commands for Vulkan to execute.
+	wsVulkanCreateCommandBuffer(vk);	// 
 
 	printf("---End Vulkan Initialization!---\n");
 }
@@ -134,12 +140,16 @@ void wsVulkanStop(wsVulkan* vk) {
 		wsVulkanStopDebugMessenger(vk);
 	}
 	
+	vkDestroyCommandPool(vk->logical_device, vk->commandpool, NULL);
+	printf("Vulkan command pool destroyed!\n");
+	
 	// Destroy Graphics Pipeline & Pipeline Layout.
 	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);
 	printf("Vulkan graphics pipeline destroyed!\n");
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);
 	printf("Vulkan pipeline layout destroyed!\n");
 	
+	// Destroy individual framebuffers within swapchain.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
 		vkDestroyFramebuffer(vk->logical_device, vk->swapchain.framebuffers[i], NULL);
 	}
@@ -173,6 +183,98 @@ void wsVulkanStop(wsVulkan* vk) {
 	printf("Vulkan surface destroyed!\n");
 	vkDestroyInstance(vk->instance, NULL);
 	printf("Vulkan instance destroyed!\n");
+}
+VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, uint32_t img_ndx) {
+	
+	// Begin recording to the command buffer!
+	VkCommandBufferBeginInfo begin_info = {};
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags = 0;
+	begin_info.pInheritanceInfo = NULL;
+	
+	VkResult result = vkBeginCommandBuffer(vk->commandbuffer, &begin_info);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan command buffer recording begin failed with result code %i!\n", result);
+		return result;
+	} else printf("Vulkan command buffer recording has begun!\n");
+	
+	
+	// Begin render pass.
+	VkRenderPassBeginInfo renderpass_info = {};
+	renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderpass_info.renderPass = vk->renderpass;
+	renderpass_info.framebuffer = vk->swapchain.framebuffers[img_ndx];
+	
+	renderpass_info.renderArea.offset.x = 0;
+	renderpass_info.renderArea.offset.y = 0;
+	renderpass_info.renderArea.extent = vk->swapchain.extent;
+	
+	VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+	renderpass_info.clearValueCount = 1;
+	renderpass_info.pClearValues = &clear_color;
+	
+	vkCmdBeginRenderPass(vk->commandbuffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
+	
+	
+	// Bind graphics pipeline, then specify viewport & scissor states for this pipeline.
+	vkCmdBindPipeline(vk->commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
+	
+	VkViewport viewport = {};
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	viewport.width = (float)vk->swapchain.extent.width;
+	viewport.height = (float)vk->swapchain.extent.height;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+	vkCmdSetViewport(vk->commandbuffer, 0, 1, &viewport);
+	
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent = vk->swapchain.extent;
+	vkCmdSetScissor(vk->commandbuffer, 0, 1, &scissor);
+	
+	
+	// !!!Draw triangle!!!
+	vkCmdDraw(vk->commandbuffer, 3, 1, 0, 0);
+	
+	
+	// End render pass.
+	vkCmdEndRenderPass(vk->commandbuffer);
+	
+	// End command buffer recording.
+	result = vkEndCommandBuffer(vk->commandbuffer);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan command buffer recording end failed with result code %i!\n", result);
+	} else printf("Vulkan command buffer recording has ended!\n");
+	return result;
+}
+VkResult wsVulkanCreateCommandBuffer(wsVulkan* vk) {
+	
+	VkCommandBufferAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	alloc_info.commandPool = vk->commandpool;
+	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	alloc_info.commandBufferCount = 1;
+	
+	VkResult result = vkAllocateCommandBuffers(vk->logical_device, &alloc_info, &vk->commandbuffer);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan command buffer creation failed with result code %i!\n", result);
+	} else printf("Vulkan command buffer created!\n");
+	return result;
+}
+VkResult wsVulkanCreateCommandPool(wsVulkan* vk) {
+	
+	VkCommandPoolCreateInfo pool_info = {};
+	pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	pool_info.queueFamilyIndex = vk->queues.ndx_graphics_family;
+	
+	VkResult result = vkCreateCommandPool(vk->logical_device, &pool_info, NULL, &vk->commandpool);
+	if(result != VK_SUCCESS) {
+		printf("ERROR: Vulkan command pool creation failed with result code %i!\n", result);
+	} else printf("Vulkan command pool created!\n");
+	return result;
 }
 
 VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk) {
@@ -565,9 +667,9 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	
 	
 	// Check if queue family indices are unique.
-	uint32_t queue_family_indices[] = {vk->queues.graphics_family, vk->queues.present_family};
+	uint32_t queue_family_indices[] = {vk->queues.ndx_graphics_family, vk->queues.ndx_present_family};
 	
-	if(vk->queues.graphics_family != vk->queues.present_family) {
+	if(vk->queues.ndx_graphics_family != vk->queues.ndx_present_family) {
 		create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		create_info.queueFamilyIndexCount = 2;
 		create_info.pQueueFamilyIndices = queue_family_indices;
@@ -706,12 +808,12 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 	
 	// Figure out how many unique queue families we need to initialize.
 	uint8_t num_unique_queue_families;
-	if(vk->queues.graphics_family == vk->queues.present_family)
+	if(vk->queues.ndx_graphics_family == vk->queues.ndx_present_family)
 		num_unique_queue_families = 1;
 	else num_unique_queue_families = 2;
 	
 	// Store queue family creation infos for later use in binding to logical device creation info.
-	uint32_t unique_queue_family_indices[2] = {vk->queues.graphics_family, vk->queues.present_family};
+	uint32_t unique_queue_family_indices[2] = {vk->queues.ndx_graphics_family, vk->queues.ndx_present_family};
 	VkDeviceQueueCreateInfo* queue_create_infos = calloc(num_unique_queue_families, sizeof(VkDeviceQueueCreateInfo));
 	
 	// Specify creation info for queue families.
@@ -757,11 +859,11 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 	VkResult result = vkCreateDevice(vk->physical_device, &create_info, NULL, &vk->logical_device);
 	
 	// Assign queue handles from logical_device.
-	vkGetDeviceQueue(vk->logical_device, vk->queues.graphics_family, 0, &vk->queues.graphics_queue);
-	vkGetDeviceQueue(vk->logical_device, vk->queues.present_family, 0, &vk->queues.present_queue);
+	vkGetDeviceQueue(vk->logical_device, vk->queues.ndx_graphics_family, 0, &vk->queues.graphics_queue);
+	vkGetDeviceQueue(vk->logical_device, vk->queues.ndx_present_family, 0, &vk->queues.present_queue);
 	
 	printf("%i unique Vulkan queue families exist; indices are as specified:\n", num_unique_queue_families);
-	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->queues.graphics_family, vk->queues.present_family);
+	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->queues.ndx_graphics_family, vk->queues.ndx_present_family);
 	
 	// FREE MEMORY!!!
 	free(queue_create_infos);
@@ -805,7 +907,7 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDevice*
 		
 		// Check for graphics queue family support.
 		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-			indices->graphics_family = i;
+			indices->ndx_graphics_family = i;
 			indices->has_graphics_family = true;
 		}
 		
@@ -813,7 +915,7 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDevice*
 		VkBool32 has_present_support = false;
 		vkGetPhysicalDeviceSurfaceSupportKHR(*physical_device, i, *surface, &has_present_support);
 		if(has_present_support) {
-			indices->present_family = i;
+			indices->ndx_present_family = i;
 			indices->has_present_family = true;
 		}
 		
@@ -917,7 +1019,7 @@ int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_devi
 	
 	
 	// If these are the same queue family, this could increase performance.
-	score += indices.graphics_family == indices.present_family ? 500 : 0;
+	score += indices.ndx_graphics_family == indices.ndx_present_family ? 500 : 0;
 	
 	// Prefer discrete GPU.  If the max texture size is much lower on the discrete card, it might be too old and suck.
 	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
