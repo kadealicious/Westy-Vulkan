@@ -54,8 +54,6 @@ typedef struct wsVulkan {
 	VkDevice			logical_device;		// Primary logical device used to interface with the physical device.
 	VkDebugUtilsMessengerEXT debug_messenger;	// Main debug messenger.
 	
-	VkCommandPool commandpool;		// Manages memory that is used to store command buffers.
-	
 	wsVulkanQueueFamilies queues;	// Contains all queue data.
 	
 	VkCommandPool	commandpool;	// Pool for queueing commands and sending to Vulkan for execution.
