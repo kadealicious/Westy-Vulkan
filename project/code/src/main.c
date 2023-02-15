@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
 	printf("===Begin%s===\n", DEBUG ? " Debug" : "");
 	
 	// Initialize GLFW and related components.
-	uint8_t windowID = wsWindowInit(640, 480);
+	uint8_t windowID = wsWindowInit(1280, 960);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	glfwSetErrorCallback(&wsGLFWErrorCallback);
 	wsInputInit(windowID, 0.3f);
@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 		// wsRun();
 		
 		// Post-logic-step.
-		// wsRender();
+		wsVulkanDrawFrame(&vk);
 		wsInputUpdate();
 		
 		// Should the program close?

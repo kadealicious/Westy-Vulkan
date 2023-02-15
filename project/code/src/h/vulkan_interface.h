@@ -56,8 +56,12 @@ typedef struct wsVulkan {
 	
 	wsVulkanQueueFamilies queues;	// Contains all queue data.
 	
-	VkCommandPool	commandpool;	// Pool for queueing commands and sending to Vulkan for execution.
-	VkCommandBuffer	commandbuffer;	// 
+	VkCommandPool	commandpool;	// Pool for sending queued and sending to Vulkan for execution.
+	VkCommandBuffer	commandbuffer;	// Buffer used for recording commands to.
+	
+	VkSemaphore img_available_semaphore;	// Is our
+	VkSemaphore render_finish_semaphore;	// 
+	VkFence inflight_fence;					// 
 	
 	wsVulkanSwapChain swapchain;	// Contains all swapchain data.
 	VkRenderPass renderpass;	// Contains the render pass data.
