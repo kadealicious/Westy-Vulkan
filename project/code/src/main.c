@@ -46,8 +46,11 @@ int main(int argc, char* argv[]) {
 		wsVulkanDrawFrame(&vk, &current_frame);
 		wsInputUpdate();
 		
+		if(wsInputGetKeyReleaseOnce(GLFW_KEY_V))
+			printf("once\n");
+		
 		// Should the program close?
-		if(wsInputGetKeyRelease(GLFW_KEY_ESCAPE)) {
+		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE)) {
 			printf("INFO: User has requested window should close!\n");
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
