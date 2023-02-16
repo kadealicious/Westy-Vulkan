@@ -8,6 +8,7 @@
 #include"shader.h"
 
 #define NUM_MAX_PIPELINES 100
+#define NUM_MAX_FRAMES_IN_FLIGHT 2
 
 // Queue family storage.
 typedef struct wsVulkanQueueFamilies {
@@ -56,12 +57,12 @@ typedef struct wsVulkan {
 	
 	wsVulkanQueueFamilies queues;	// Contains all queue data.
 	
-	VkCommandPool	commandpool;	// Pool for sending queued and sending to Vulkan for execution.
-	VkCommandBuffer	commandbuffer;	// Buffer used for recording commands to.
+	VkCommandPool commandpool;		// Pool for sending queued and sending to Vulkan for execution.
+	VkCommandBuffer* commandbuffers;// Buffer(s) used for recording commands to for sending to command pool.
 	
-	VkSemaphore img_available_semaphore;	// Is our
-	VkSemaphore render_finish_semaphore;	// 
-	VkFence inflight_fence;					// 
+	VkSemaphore* img_available_semaphores;	// Used to check if GPU has any image(s) available for rendering.
+	VkSemaphore* render_finish_semaphores;	// Used to check if GPU has finished rendering available image(s).
+	VkFence* inflight_fences;				// Used to check if image(s) can be processed by the CPU.
 	
 	wsVulkanSwapChain swapchain;	// Contains all swapchain data.
 	VkRenderPass renderpass;	// Contains the render pass data.
@@ -75,6 +76,7 @@ typedef struct wsVulkan {
 
 // Vulkan interfacing functions.
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
+VkResult wsVulkanDrawFrame(wsVulkan* vk, uint32_t* current_frame_ptr);
 void wsVulkanStop(wsVulkan* vk);
 
 // Self-explanatory.

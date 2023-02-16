@@ -22,12 +22,13 @@ int main(int argc, char* argv[]) {
 	printf("===Begin%s===\n", DEBUG ? " Debug" : "");
 	
 	// Initialize GLFW and related components.
-	uint8_t windowID = wsWindowInit(1280, 960);
+	uint8_t windowID = wsWindowInit(640, 480);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	glfwSetErrorCallback(&wsGLFWErrorCallback);
 	wsInputInit(windowID, 0.3f);
 	
 	// Initialize Vulkan.
+	uint32_t current_frame = 0;
 	wsVulkan vk = {};
 	wsVulkanSetDebug(DEBUG);
 	wsVulkanInit(&vk, windowID);
@@ -42,11 +43,12 @@ int main(int argc, char* argv[]) {
 		// wsRun();
 		
 		// Post-logic-step.
-		wsVulkanDrawFrame(&vk);
+		wsVulkanDrawFrame(&vk, &current_frame);
 		wsInputUpdate();
 		
 		// Should the program close?
 		if(wsInputGetKeyRelease(GLFW_KEY_ESCAPE)) {
+			printf("INFO: User has requested window should close!\n");
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
 	}

@@ -14,7 +14,7 @@
 
 // General Vulkan interfacing functions.
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
-VkResult wsVulkanDrawFrame(wsVulkan* vk);
+VkResult wsVulkanDrawFrame(wsVulkan* vk, uint32_t* current_frame_ptr);
 void wsVulkanStop(wsVulkan* vk);
 
 // Vulkan initialization functions.
@@ -38,8 +38,8 @@ VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass.
 VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
 VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk);		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
 VkResult wsVulkanCreateCommandPool(wsVulkan* vk);		// Create command pool for queueing commands to Vulkan.
-VkResult wsVulkanCreateCommandBuffer(wsVulkan* vk);		// Creates command buffer for holding commands.
-VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, uint32_t img_ndx);		// Records commands into a buffer.
+VkResult wsVulkanCreateCommandBuffers(wsVulkan* vk);	// Creates command buffer for holding commands.
+VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
 VkResult wsVulkanCreateSyncObjects(wsVulkan* vk);							// Creates semaphores (for GPU command execution syncing) & fence(s) (for GPU & CPU command execution syncing).
 VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
@@ -132,45 +132,47 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	wsVulkanCreateFrameBuffers(vk);		// Creates framebuffer objects for interfacing with image view attachments.
 	
 	wsVulkanCreateCommandPool(vk);		// Creates command pool, which is used for executing commands sent via command buffer.
-	wsVulkanCreateCommandBuffer(vk);	// Creates command buffer, which is used for queueing commands for the command pool to execute.
+	wsVulkanCreateCommandBuffers(vk);	// Creates command buffer(s), used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects(vk);
 	
 	printf("---End Vulkan Initialization!---\n");
 }
-VkResult wsVulkanDrawFrame(wsVulkan* vk) {
+VkResult wsVulkanDrawFrame(wsVulkan* vk, uint32_t* current_frame_ptr) {
+	
+	uint32_t current_frame = *current_frame_ptr;
 	
 	// Wait for any important GPU tasks to finish up first.
-	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fence, VK_TRUE, UINT64_MAX);
-	vkResetFences(vk->logical_device, 1, &vk->inflight_fence);
+	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[current_frame], VK_TRUE, UINT64_MAX);
+	vkResetFences(vk->logical_device, 1, &vk->inflight_fences[current_frame]);
 	
 	// Acquire next swapchain image.
 	uint32_t img_ndx;
-	vkAcquireNextImageKHR(vk->logical_device, vk->swapchain.sc, UINT64_MAX, vk->img_available_semaphore, VK_NULL_HANDLE, &img_ndx);
+	vkAcquireNextImageKHR(vk->logical_device, vk->swapchain.sc, UINT64_MAX, vk->img_available_semaphores[current_frame], VK_NULL_HANDLE, &img_ndx);
 	
 	// Reset and record command buffer for submission to Vulkan.
-	vkResetCommandBuffer(vk->commandbuffer, 0);
-	wsVulkanRecordCommandBuffer(vk, img_ndx);
+	vkResetCommandBuffer(vk->commandbuffers[current_frame], 0);
+	wsVulkanRecordCommandBuffer(vk, &vk->commandbuffers[current_frame], img_ndx);
 	
 	
 	// Create configuration for queue submission & synchronization.
 	VkSubmitInfo submit_info = {};
 	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	
-	VkSemaphore wait_semaphores[]		= {vk->img_available_semaphore};
+	VkSemaphore wait_semaphores[]		= {vk->img_available_semaphores[current_frame]};
 	VkPipelineStageFlags wait_stages[]	= {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 	submit_info.waitSemaphoreCount = 1;
 	submit_info.pWaitSemaphores = wait_semaphores;
 	submit_info.pWaitDstStageMask = wait_stages;
 	
 	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers = &vk->commandbuffer;
+	submit_info.pCommandBuffers = &vk->commandbuffers[current_frame];
 	
-	VkSemaphore signal_semaphores[] = {vk->render_finish_semaphore};
+	VkSemaphore signal_semaphores[] = {vk->render_finish_semaphores[current_frame]};
 	submit_info.signalSemaphoreCount = 1;
 	submit_info.pSignalSemaphores = signal_semaphores;
 	
 	
-	VkResult result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fence);
+	VkResult result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fences[current_frame]);
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan draw command buffer submission failed with result code %i!\n", result);
 		return result;
@@ -195,6 +197,8 @@ VkResult wsVulkanDrawFrame(wsVulkan* vk) {
 	// DRAW!!!  TO!!!!!!  SCREEN!!!!!!!!!  AAAAAAAAAHHHHHHHHH!!!!!!!!!!!!!!!!!!
 	vkQueuePresentKHR(vk->queues.present_queue, &present_info);
 	
+	*current_frame_ptr += 1;
+	*current_frame_ptr %= NUM_MAX_FRAMES_IN_FLIGHT;
 	
 	return VK_SUCCESS;
 }
@@ -208,13 +212,15 @@ void wsVulkanStop(wsVulkan* vk) {
 		wsVulkanStopDebugMessenger(vk);
 	}
 	
-	// Destroy sync objects.
-	vkDestroySemaphore(vk->logical_device, vk->img_available_semaphore, NULL);
-	printf("Vulkan \"image available?\" semaphore destroyed!\n");
-	vkDestroySemaphore(vk->logical_device, vk->render_finish_semaphore, NULL);
-	printf("Vulkan \"render finished?\" semaphore destroyed!\n");
-	vkDestroyFence(vk->logical_device, vk->inflight_fence, NULL);
-	printf("Vulkan \"in flight?\" fence destroyed!\n");
+	// Destroy all sync objects.
+	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
+		vkDestroySemaphore(vk->logical_device, vk->img_available_semaphores[i], NULL);
+		printf("Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		vkDestroySemaphore(vk->logical_device, vk->render_finish_semaphores[i], NULL);
+		printf("Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		vkDestroyFence(vk->logical_device, vk->inflight_fences[i], NULL);
+		printf("Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+	}
 	
 	vkDestroyCommandPool(vk->logical_device, vk->commandpool, NULL);
 	printf("Vulkan command pool destroyed!\n");
@@ -263,6 +269,11 @@ void wsVulkanStop(wsVulkan* vk) {
 
 VkResult wsVulkanCreateSyncObjects(wsVulkan* vk) {
 	
+	// Resize arrays to hold all required semaphores & fences.
+	vk->img_available_semaphores= malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->render_finish_semaphores= malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->inflight_fences			= malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkFence));
+	
 	VkSemaphoreCreateInfo semaphore_info = {};
 	semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	
@@ -270,30 +281,33 @@ VkResult wsVulkanCreateSyncObjects(wsVulkan* vk) {
 	fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;		// Prevents first call to wsVulkanDrawFrame() from hanging up on an unsignaled fence.
 	
-	
-	VkResult result;
-	
-	result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphore);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan \"image available?\" semaphore creation failed with result code %i!\n", result);
-		return result;
-	} else printf("Vulkan \"image available?\" semaphore created!\n");
-	
-	result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphore);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan \"render finished?\" semaphore creation failed with result code %i!\n", result);
-		return result;
-	} else printf("Vulkan \"render finished?\" semaphore created!\n");
-	
-	result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fence);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan \"in flight?\" fence creation failed with result code %i!\n", result);
-		return result;
-	} else printf("Vulkan \"in flight?\" fence created!\n");
+	// Create all semaphores & fences!
+	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
+		
+		VkResult result;
+		
+		result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);
+		if(result != VK_SUCCESS) {
+			printf("ERROR: Vulkan \"image available?\" semaphore %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
+			return result;
+		} else printf("Vulkan \"image available?\" semaphore %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		
+		result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);
+		if(result != VK_SUCCESS) {
+			printf("ERROR: Vulkan \"render finished?\" semaphore %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
+			return result;
+		} else printf("Vulkan \"render finished?\" semaphore %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		
+		result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);
+		if(result != VK_SUCCESS) {
+			printf("ERROR: Vulkan \"in flight?\" fence %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
+			return result;
+		} else printf("Vulkan \"in flight?\" fence %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+	}
 	
 	return VK_SUCCESS;
 }
-VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, uint32_t img_ndx) {
+VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, VkCommandBuffer* buffer, uint32_t img_ndx) {
 	
 	// Begin recording to the command buffer!
 	VkCommandBufferBeginInfo begin_info = {};
@@ -301,7 +315,7 @@ VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, uint32_t img_ndx) {
 	begin_info.flags = 0;
 	begin_info.pInheritanceInfo = NULL;
 	
-	VkResult result = vkBeginCommandBuffer(vk->commandbuffer, &begin_info);
+	VkResult result = vkBeginCommandBuffer(*buffer, &begin_info);
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan command buffer recording begin failed with result code %i!\n", result);
 		return result;
@@ -322,11 +336,11 @@ VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, uint32_t img_ndx) {
 	renderpass_info.clearValueCount = 1;
 	renderpass_info.pClearValues = &clear_color;
 	
-	vkCmdBeginRenderPass(vk->commandbuffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(*buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 	
 	// Bind graphics pipeline, then specify viewport & scissor states for this pipeline.
-	vkCmdBindPipeline(vk->commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
+	vkCmdBindPipeline(*buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
 	
 	VkViewport viewport = {};
 	viewport.x = 0.0f;
@@ -335,42 +349,52 @@ VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, uint32_t img_ndx) {
 	viewport.height = (float)vk->swapchain.extent.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
-	vkCmdSetViewport(vk->commandbuffer, 0, 1, &viewport);
+	vkCmdSetViewport(*buffer, 0, 1, &viewport);
 	
 	VkRect2D scissor = {};
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
 	scissor.extent = vk->swapchain.extent;
-	vkCmdSetScissor(vk->commandbuffer, 0, 1, &scissor);
+	vkCmdSetScissor(*buffer, 0, 1, &scissor);
 	
 	
 	// !!!Draw triangle!!!
-	vkCmdDraw(vk->commandbuffer, 3, 1, 0, 0);
+	vkCmdDraw(*buffer, 3, 1, 0, 0);
 	
 	
 	// End render pass.
-	vkCmdEndRenderPass(vk->commandbuffer);
+	vkCmdEndRenderPass(*buffer);
 	
 	// End command buffer recording.
-	result = vkEndCommandBuffer(vk->commandbuffer);
+	result = vkEndCommandBuffer(*buffer);
 	if(result != VK_SUCCESS) {
 		printf("ERROR: Vulkan command buffer recording end failed with result code %i!\n", result);
 	}// else printf("Vulkan command buffer recording has ended!\n");
 	return result;
 }
-VkResult wsVulkanCreateCommandBuffer(wsVulkan* vk) {
+VkResult wsVulkanCreateCommandBuffers(wsVulkan* vk) {
 	
+	// Resize command buffers array to contain enough command buffers for each in-flight frame.
+	vk->commandbuffers = malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkCommandBuffer));
+	
+	// Specify command buffer allocation configuration.
 	VkCommandBufferAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	alloc_info.commandPool = vk->commandpool;
 	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	alloc_info.commandBufferCount = 1;
+	alloc_info.commandBufferCount = (uint32_t)NUM_MAX_FRAMES_IN_FLIGHT;
 	
-	VkResult result = vkAllocateCommandBuffers(vk->logical_device, &alloc_info, &vk->commandbuffer);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan command buffer creation failed with result code %i!\n", result);
-	} else printf("Vulkan command buffer created!\n");
-	return result;
+	// Allocate all command buffers.
+	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
+		
+		VkResult result = vkAllocateCommandBuffers(vk->logical_device, &alloc_info, vk->commandbuffers);
+		if(result != VK_SUCCESS) {
+			printf("ERROR: Vulkan command buffer %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
+			return result;
+		} else printf("Vulkan command buffer %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+	}
+	
+	return VK_SUCCESS;
 }
 VkResult wsVulkanCreateCommandPool(wsVulkan* vk) {
 	

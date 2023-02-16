@@ -30,7 +30,7 @@ void wsInputInit(uint8_t windowID, float mouse_sensitivity) {
 int wsInputGetKeyLast()	{ return key_last; }
 bool wsInputGetKeyHold(int key)	{ return (glfwGetKey(wsWindowGetPtr(windowID), key) == GLFW_PRESS); }
 bool wsInputGetKeyPress(int key)	{ return (glfwGetKeyOnce(wsWindowGetPtr(windowID), key) == GLFW_PRESS); }
-bool wsInputGetKeyRelease(int key)	{ return (glfwGetKey(wsWindowGetPtr(windowID), key) == GLFW_RELEASE) && (key = key_last); }
+bool wsInputGetKeyRelease(int key)	{ return (glfwGetKey(wsWindowGetPtr(windowID), key) == GLFW_RELEASE) && (key == key_last); }
 
 float wsInputGetMousePosX()		{ return mouse_position[0]; }
 float wsInputGetMousePosY()		{ return mouse_position[1]; }
