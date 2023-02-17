@@ -465,10 +465,9 @@ VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk) {
 		framebuffer_info.layers = 1;
 		
 		result = vkCreateFramebuffer(vk->logical_device, &framebuffer_info, NULL, &vk->swapchain.framebuffers[i]);
-		if(result != VK_SUCCESS) {
-			printf("ERROR: Vulkan framebuffer creation %i/%i failed with result code %i!\n", i, vk->swapchain.num_images, result);
+		wsVulkanPrint("framebuffer creation", WS_NONE, i, vk->swapchain.num_images, result);
+		if(result != VK_SUCCESS)
 			break;
-		}
 	}
 	
 	printf("%i/%i Vulkan framebuffers created!\n", vk->swapchain.num_images, vk->swapchain.num_images);
@@ -532,9 +531,7 @@ VkResult wsVulkanCreateRenderPass(wsVulkan* vk) {
 	
 	// Self-explanatory copypasta code.	
 	VkResult result = vkCreateRenderPass(vk->logical_device, &renderpass_info, NULL, &vk->renderpass);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan render pass creation failed with result code %i!\n", result);
-	} else printf("Vulkan render pass created!\n");
+	wsVulkanPrint("render pass creation", WS_NONE, WS_NONE, WS_NONE, result);
 	return result;
 }
 
@@ -549,9 +546,7 @@ VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID) {
 	// Create and return shader module!
 	VkShaderModule module;
 	VkResult result = vkCreateShaderModule(vk->logical_device, &create_info, NULL, &module);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Shader module creation failed for shader ID %i with result code %i!\n", shaderID, result);
-	} else printf("Shader module created for shader ID %i!\n", shaderID);
+	wsVulkanPrint("shader module creation", shaderID, WS_NONE, WS_NONE, result);
 	return module;
 }
 
@@ -741,10 +736,7 @@ VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
 	
 	// Create pipeline layout!  If unsuccessful, say so and return the result code as an integer.
 	VkResult result = vkCreatePipelineLayout(vk->logical_device, &pipelinelayout_info, NULL, &vk->pipeline_layout);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan pipeline layout creation failed with result code %i!\n", result);
-		return result;
-	} else printf("Vulkan pipeline layout created!\n");
+	wsVulkanPrint("pipeline layout creation", WS_NONE, WS_NONE, WS_NONE, result);
 	
 	// Specify graphics pipeline creation info.
 	VkGraphicsPipelineCreateInfo pipeline_info = {};
@@ -781,9 +773,7 @@ VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk) {
 	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
 	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
 	
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan graphics pipeline creation failed with result code %i!\n", result);
-	} else printf("Vulkan graphics pipeline created!\n");
+	wsVulkanPrint("graphics pipeline creation", WS_NONE, WS_NONE, WS_NONE, result);
 	return result;
 }
 
@@ -818,11 +808,10 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
 		
 		// Create image view for each image view object!
 		VkResult result = vkCreateImageView(vk->logical_device, &create_info, NULL, &vk->swapchain.image_views[i]);
-		if(result != VK_SUCCESS)
-			printf("ERROR: Image view %i not created successfully; code %i!\n", i, result);
-		else num_created++;
+		wsVulkanPrintQuiet("Image view creation", WS_NONE, i, vk->swapchain.num_images, result);
+		if(result == VK_SUCCESS) num_created++;
 	}
-
+	
 	if(num_created != vk->swapchain.num_images) {
 		printf("ERROR: Only %i/%i image views created!\n", num_created, vk->swapchain.num_images);
 	} else printf("%i/%i Vulkan image views created!\n", num_created, vk->swapchain.num_images);
@@ -889,9 +878,7 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	printf("Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
 		vk->swapchain.extent.width, vk->swapchain.extent.height, vk->swapchain.surface_format.format, vk->swapchain.present_mode);
 	
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan swap chain creation failed with result code %i!\n", result);
-	} else printf("Vulkan swap chain created!\n");
+	wsVulkanPrint("swap chain creation", WS_NONE, WS_NONE, WS_NONE, result);
 	return result;
 }
 
@@ -979,12 +966,8 @@ void wsVulkanQuerySwapChainSupport(wsVulkan* vk) {
 
 // Creates a surface bound to our GLFW window.
 VkResult wsVulkanCreateSurface(wsVulkan* vk) {
-	
 	VkResult result = glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan surface creation for window %i failed with result code %i!\n", vk->windowID, result);
-	} else printf("Vulkan surface created for window %i!\n", vk->windowID);
-	
+	wsVulkanPrint("surface creation for window", vk->windowID, WS_NONE, WS_NONE, result);
 	return result;
 }
 
@@ -1053,13 +1036,12 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 	printf("%i unique Vulkan queue families exist; indices are as specified:\n", num_unique_queue_families);
 	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->queues.ndx_graphics_family, vk->queues.ndx_present_family);
 	
+	
 	// FREE MEMORY!!!
 	free(queue_create_infos);
 	
 	
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan logical device creation failed with result code %i!\n", result);
-	} else printf("Vulkan logical device created!\n");
+	wsVulkanPrint("logical device creation", WS_NONE, WS_NONE, WS_NONE, result);
 	return result;
 }
 
@@ -1265,9 +1247,7 @@ VkResult wsVulkanInitDebugMessenger(wsVulkan* vk) {
 	
 	// Create debug messenger!
 	VkResult result = wsVulkanCreateDebugUtilsMessengerEXT(vk->instance, &create_info, NULL, &vk->debug_messenger);
-	if(result != VK_SUCCESS) {
-			printf("ERROR: Vulkan debug messenger creation failed with result code %i!\n", result);
-	} else printf("Vulkan debug messenger created!\n");
+	wsVulkanPrint("debug messenger creation", WS_NONE, WS_NONE, WS_NONE, result);
 	
 	return result;
 }
