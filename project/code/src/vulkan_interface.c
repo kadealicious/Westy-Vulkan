@@ -12,36 +12,47 @@
 #include"h/shader.h"
 
 
-// General Vulkan interfacing functions.
+
+
+// TODO: REPLACE ALL PRINTF() AT FUNCTION ENDS WITH wsVulkanPrint() OR wsVulkanPrintQuiet().
+
+
+
+
+// Main external calls to Vulkan.
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
-VkResult wsVulkanDrawFrame(wsVulkan* vk, uint32_t* current_frame_ptr);
+VkResult wsVulkanDrawFrame(wsVulkan* vk);
 void wsVulkanStop(wsVulkan* vk);
 
-// Vulkan initialization functions.
+// Verify device and platform functionality with Vulkan.
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);					// Enabled validation layers for detailed debugging.		
 bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info);				// Enabled extensions required by GLFW, debug mode, etc.
 void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensions);	// Adds debug extension name to extensions**.
 
 // Device-choosing and setup.
+VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
 bool wsVulkanPickPhysicalDevice(wsVulkan* vk);	// Picks the best-suited GPU for our program.
+
 int32_t wsVulkanRatePhysicalDevice(wsVulkan* vk, VkPhysicalDevice* physical_device);	// Rates GPU based on device features and properties.
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);			// Queries whethor or not physical_device supports required extensions.
 void wsVulkanQuerySwapChainSupport(wsVulkan* vk);										// Queries whether or not physical_device can support features required by vk.
 void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChain* swapchain_info);	// Choose swap chain surface format.
-void wsVulkanChooseSwapExtent(wsVulkan* vk);									// Choose swap chain image resolution.
+void wsVulkanChooseSwapExtent(wsVulkan* vk);								// Choose swap chain image resolution.
 void wsVulkanChooseSwapPresentMode(wsVulkanSwapChain* swapchain_info);		// Choose swap chain presentation mode.
+
+// Low-level Vulkan components.
 VkResult wsVulkanCreateSwapChain(wsVulkan* vk);									// Creates a swap chain for image buffering.
 uint32_t wsVulkanCreateImageViews(wsVulkan* vk);								// Creates image views viewing swap chain images; returns number of image views created successfully.
-VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
-VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing to the screen.
-VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass.
-VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline and stores its ID inside of struct vk.
 VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk);		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
+VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing to the screen; stores inside of struct vk.
+VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass; stores inside of struct vk.
+VkResult wsVulkanCreateGraphicsPipeline(wsVulkan* vk);	// Creates a graphics pipeline; stores inside of struct vk.
+VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
+
+VkResult wsVulkanCreateSyncObjects(wsVulkan* vk);		// Creates semaphores (for GPU command execution syncing) & fence(s) (for GPU & CPU command execution syncing).
 VkResult wsVulkanCreateCommandPool(wsVulkan* vk);		// Create command pool for queueing commands to Vulkan.
 VkResult wsVulkanCreateCommandBuffers(wsVulkan* vk);	// Creates command buffer for holding commands.
 VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
-VkResult wsVulkanCreateSyncObjects(wsVulkan* vk);							// Creates semaphores (for GPU command execution syncing) & fence(s) (for GPU & CPU command execution syncing).
-VkShaderModule wsVulkanCreateShaderModule(wsVulkan* vk, uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Queue family management.
 void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
@@ -66,6 +77,58 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 uint8_t debug;
 void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
+// Generic print statements.
+enum {WS_NONE = INT32_MIN};
+void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result) {
+	
+	// If we have neither an ID nor fraction.
+	if(ID == WS_NONE && numerator == WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
+		else printf("INFO: Vulkan %s success!\n", str);
+		
+		// If we have no ID but do have a fraction.
+	} else if(ID == WS_NONE && numerator != WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
+		else printf("INFO: Vulkan %s %i/%i success!\n", str, numerator, denominator);
+		
+		// If we have an ID but no fraction.
+	} else if(ID != WS_NONE && numerator == WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
+		else printf("INFO: Vulkan %s w/ ID %i success!\n", str, ID);
+		
+		// If we have both an ID & fraction.
+	} else if(ID != WS_NONE && numerator != WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
+		else printf("INFO: Vulkan %s %i/%i w/ ID %i success!\n", str, numerator, denominator, ID);
+	}
+}
+void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result) {
+	
+	// If we have neither an ID nor fraction.
+	if(ID == WS_NONE && numerator == WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
+		
+		// If we have no ID but do have a fraction.
+	} else if(ID == WS_NONE && numerator != WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
+		
+		// If we have an ID but no fraction.
+	} else if(ID != WS_NONE && numerator == WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
+		
+		// If we have both an ID & fraction.
+	} else if(ID != WS_NONE && numerator != WS_NONE) {
+		if(result != VK_SUCCESS)
+			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
+	}
+}
 
 // Call after wsWindowInit().
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
@@ -78,105 +141,98 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	// Specify application info and store inside struct create_info.
 	VkApplicationInfo app_info;
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	app_info.pApplicationName = "Westy";
-	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	app_info.pApplicationName = "Westy Vulkan";
+	app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
 	
 	app_info.pEngineName = "Westy Vulkan";
-	app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+	app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
 	
-	app_info.apiVersion = VK_API_VERSION_1_0;
+	app_info.apiVersion = VK_API_VERSION_1_3;
 	app_info.pNext = NULL;
 	
 	VkInstanceCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	create_info.pApplicationInfo = &app_info;
 	
-	
 	// Check that we have all the required extensions for Vulkan.
 	wsVulkanEnableRequiredExtensions(&create_info);
 	
-	// Enable Vulkan validation layers if in debug mode.
-	create_info.enabledLayerCount = 0;
-	create_info.pNext = NULL;
-	// If debug, do debug things.  If debug, we will need this struct in a moment for scope-related reasons in vkCreateInstance().
+		
+	// If debug, we will need this struct in a moment for scope-related reasons in vkCreateInstance().  Otherwise, disregard.
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {};
+	
 	if(debug) {
 		wsVulkanEnableValidationLayers(&create_info);
 		
-		// This allows the debug messenger to debug vkCreateInstance(), as opposed to skipping that part.  Pretty important stuff!
+		// Allow the debug messenger to debug vkCreateInstance().
 		wsVulkanPopulateDebugMessengerCreationInfo(&debug_create_info);
 		create_info.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debug_create_info;
 	}
 	
+	
 	// Create Vulkan instance!
 	VkResult result = vkCreateInstance(&create_info, NULL, &vk->instance);
-	if(result != VK_SUCCESS)
-		printf("ERROR: Vulkan instance creation failed with result code %i!\n", result);
-	else printf("Vulkan instance created!\n");
+	wsVulkanPrint("instance creation", WS_NONE, WS_NONE, WS_NONE, result);
 	
-	// Used for communicating when something has gone awry!
+	
+	// Sends messages to stdout when debug messages occur.
 	if(debug) {
 		wsVulkanInitDebugMessenger(vk);
 	}
 	
-	wsVulkanCreateSurface(vk);
+	wsVulkanCreateSurface(vk);	// Creates window surface for drawing.
 	
-	// Physical device is interfaced with via the logical device.
-	wsVulkanPickPhysicalDevice(vk);
-	wsVulkanCreateLogicalDevice(vk, create_info.enabledLayerCount, create_info.ppEnabledLayerNames);
+	wsVulkanPickPhysicalDevice(vk);	// Physical device == GPU.
+	wsVulkanCreateLogicalDevice(vk, create_info.enabledLayerCount, create_info.ppEnabledLayerNames);	// Logical device interfaces with physical device for us.
 	
 	wsVulkanCreateSwapChain(vk);		// Swap chain is in charge of swapping images to the screen when they are needed.
 	wsVulkanCreateImageViews(vk);		// Image views describe how we will use, write-to, and read each image.
 	wsVulkanCreateRenderPass(vk);
-	wsVulkanCreateGraphicsPipeline(vk);	// Graphics pipeline combines all created objects and information into one abstraction for working with.
+	wsVulkanCreateGraphicsPipeline(vk);	// Graphics pipeline combines all created objects and information into one abstraction.
 	wsVulkanCreateFrameBuffers(vk);		// Creates framebuffer objects for interfacing with image view attachments.
 	
 	wsVulkanCreateCommandPool(vk);		// Creates command pool, which is used for executing commands sent via command buffer.
 	wsVulkanCreateCommandBuffers(vk);	// Creates command buffer(s), used for queueing commands for the command pool to execute.
-	wsVulkanCreateSyncObjects(vk);
+	wsVulkanCreateSyncObjects(vk);		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
+	
 	
 	printf("---End Vulkan Initialization!---\n");
 }
-VkResult wsVulkanDrawFrame(wsVulkan* vk, uint32_t* current_frame_ptr) {
-	
-	uint32_t current_frame = *current_frame_ptr;
+VkResult wsVulkanDrawFrame(wsVulkan* vk) {
 	
 	// Wait for any important GPU tasks to finish up first.
-	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[current_frame], VK_TRUE, UINT64_MAX);
-	vkResetFences(vk->logical_device, 1, &vk->inflight_fences[current_frame]);
+	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame], VK_TRUE, UINT64_MAX);
+	vkResetFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame]);
 	
 	// Acquire next swapchain image.
 	uint32_t img_ndx;
-	vkAcquireNextImageKHR(vk->logical_device, vk->swapchain.sc, UINT64_MAX, vk->img_available_semaphores[current_frame], VK_NULL_HANDLE, &img_ndx);
+	vkAcquireNextImageKHR(vk->logical_device, vk->swapchain.sc, UINT64_MAX, vk->img_available_semaphores[vk->swapchain.current_frame], VK_NULL_HANDLE, &img_ndx);
 	
 	// Reset and record command buffer for submission to Vulkan.
-	vkResetCommandBuffer(vk->commandbuffers[current_frame], 0);
-	wsVulkanRecordCommandBuffer(vk, &vk->commandbuffers[current_frame], img_ndx);
+	vkResetCommandBuffer(vk->commandbuffers[vk->swapchain.current_frame], 0);
+	wsVulkanRecordCommandBuffer(vk, &vk->commandbuffers[vk->swapchain.current_frame], img_ndx);
 	
 	
 	// Create configuration for queue submission & synchronization.
 	VkSubmitInfo submit_info = {};
 	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	
-	VkSemaphore wait_semaphores[]		= {vk->img_available_semaphores[current_frame]};
+	VkSemaphore wait_semaphores[]		= {vk->img_available_semaphores[vk->swapchain.current_frame]};
 	VkPipelineStageFlags wait_stages[]	= {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 	submit_info.waitSemaphoreCount = 1;
 	submit_info.pWaitSemaphores = wait_semaphores;
 	submit_info.pWaitDstStageMask = wait_stages;
 	
 	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers = &vk->commandbuffers[current_frame];
+	submit_info.pCommandBuffers = &vk->commandbuffers[vk->swapchain.current_frame];
 	
-	VkSemaphore signal_semaphores[] = {vk->render_finish_semaphores[current_frame]};
+	VkSemaphore signal_semaphores[] = {vk->render_finish_semaphores[vk->swapchain.current_frame]};
 	submit_info.signalSemaphoreCount = 1;
 	submit_info.pSignalSemaphores = signal_semaphores;
 	
-	
-	VkResult result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fences[current_frame]);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan draw command buffer submission failed with result code %i!\n", result);
-		return result;
-	}// else printf("Vulkan draw command buffer submitted!\n");
+	// Submit queue to be executed by Vulkan.
+	VkResult result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fences[vk->swapchain.current_frame]);
+	wsVulkanPrintQuiet("draw command buffer submission", WS_NONE, WS_NONE, WS_NONE, result);
 	
 	
 	// Configure presentation specification.
@@ -197,8 +253,8 @@ VkResult wsVulkanDrawFrame(wsVulkan* vk, uint32_t* current_frame_ptr) {
 	// DRAW!!!  TO!!!!!!  SCREEN!!!!!!!!!  AAAAAAAAAHHHHHHHHH!!!!!!!!!!!!!!!!!!
 	vkQueuePresentKHR(vk->queues.present_queue, &present_info);
 	
-	*current_frame_ptr += 1;
-	*current_frame_ptr %= NUM_MAX_FRAMES_IN_FLIGHT;
+	vk->swapchain.current_frame++;
+	vk->swapchain.current_frame %= NUM_MAX_FRAMES_IN_FLIGHT;
 	
 	return VK_SUCCESS;
 }
@@ -287,22 +343,13 @@ VkResult wsVulkanCreateSyncObjects(wsVulkan* vk) {
 		VkResult result;
 		
 		result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);
-		if(result != VK_SUCCESS) {
-			printf("ERROR: Vulkan \"image available?\" semaphore %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
-			return result;
-		} else printf("Vulkan \"image available?\" semaphore %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		wsVulkanPrint("\"image available?\" semaphore creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
 		
 		result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);
-		if(result != VK_SUCCESS) {
-			printf("ERROR: Vulkan \"render finished?\" semaphore %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
-			return result;
-		} else printf("Vulkan \"render finished?\" semaphore %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		wsVulkanPrint("\"render finished?\" semaphore creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
 		
 		result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);
-		if(result != VK_SUCCESS) {
-			printf("ERROR: Vulkan \"in flight?\" fence %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
-			return result;
-		} else printf("Vulkan \"in flight?\" fence %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		wsVulkanPrint("\"in flight?\" semaphore creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
 	}
 	
 	return VK_SUCCESS;
@@ -316,10 +363,7 @@ VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, VkCommandBuffer* buffer, uint
 	begin_info.pInheritanceInfo = NULL;
 	
 	VkResult result = vkBeginCommandBuffer(*buffer, &begin_info);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan command buffer recording begin failed with result code %i!\n", result);
-		return result;
-	}// else printf("Vulkan command buffer recording has begun!\n");
+	wsVulkanPrintQuiet("command buffer recording begin", WS_NONE, WS_NONE, WS_NONE, result);
 	
 	
 	// Begin render pass.
@@ -367,9 +411,7 @@ VkResult wsVulkanRecordCommandBuffer(wsVulkan* vk, VkCommandBuffer* buffer, uint
 	
 	// End command buffer recording.
 	result = vkEndCommandBuffer(*buffer);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan command buffer recording end failed with result code %i!\n", result);
-	}// else printf("Vulkan command buffer recording has ended!\n");
+	wsVulkanPrintQuiet("command buffer recording end", WS_NONE, WS_NONE, WS_NONE, result);
 	return result;
 }
 VkResult wsVulkanCreateCommandBuffers(wsVulkan* vk) {
@@ -388,10 +430,7 @@ VkResult wsVulkanCreateCommandBuffers(wsVulkan* vk) {
 	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
 		
 		VkResult result = vkAllocateCommandBuffers(vk->logical_device, &alloc_info, vk->commandbuffers);
-		if(result != VK_SUCCESS) {
-			printf("ERROR: Vulkan command buffer %i/%i creation failed with result code %i!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
-			return result;
-		} else printf("Vulkan command buffer %i/%i created!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		wsVulkanPrint("command buffer creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
 	}
 	
 	return VK_SUCCESS;
@@ -404,9 +443,7 @@ VkResult wsVulkanCreateCommandPool(wsVulkan* vk) {
 	pool_info.queueFamilyIndex = vk->queues.ndx_graphics_family;
 	
 	VkResult result = vkCreateCommandPool(vk->logical_device, &pool_info, NULL, &vk->commandpool);
-	if(result != VK_SUCCESS) {
-		printf("ERROR: Vulkan command pool creation failed with result code %i!\n", result);
-	} else printf("Vulkan command pool created!\n");
+	wsVulkanPrint("command pool creation", WS_NONE, WS_NONE, WS_NONE, result);
 	return result;
 }
 

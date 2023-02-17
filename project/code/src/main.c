@@ -13,41 +13,47 @@
 #include"h/input.h"
 #include"h/vulkan_interface.h"
 
+
 // Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
 #define DEBUG 1
 
+
 void wsGLFWErrorCallback(int code, const char* description);
+
 
 int main(int argc, char* argv[]) {
 	printf("===Begin%s===\n", DEBUG ? " Debug" : "");
 	
-	// Initialize GLFW and related components.
+	
+	// Initialize GLFW.
 	uint8_t windowID = wsWindowInit(640, 480);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	glfwSetErrorCallback(&wsGLFWErrorCallback);
+	
+	// Bind keyboard input to our GLFW window.
 	wsInputInit(windowID, 0.3f);
 	
 	// Initialize Vulkan.
-	uint32_t current_frame = 0;
 	wsVulkan vk = {};
 	wsVulkanSetDebug(DEBUG);
 	wsVulkanInit(&vk, windowID);
-
+	
+	
 	// Main loop.
 	printf("\n===Start%s Run===\n", DEBUG ? " Debug" : "");
+	
 	while(!glfwWindowShouldClose(window)) {
+		
 		// Pre-logic-step.
-		// ws
+		
 		
 		// Logic step.
-		// wsRun();
+		
 		
 		// Post-logic-step.
-		wsVulkanDrawFrame(&vk, &current_frame);
+		wsVulkanDrawFrame(&vk);
 		wsInputUpdate();
 		
-		if(wsInputGetKeyReleaseOnce(GLFW_KEY_V))
-			printf("once\n");
 		
 		// Should the program close?
 		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE)) {
@@ -57,12 +63,13 @@ int main(int argc, char* argv[]) {
 	}
 	printf("===Stop%s Run===\n\n", DEBUG ? " Debug" : "");
 	
+	
 	// Program exit procedure.
 	wsVulkanStop(&vk);
 	wsWindowExit(windowID);
 	
+	
 	printf("===End%s===\n", DEBUG ? " Debug" : "");
-	// getchar();
 	return 0;
 }
 

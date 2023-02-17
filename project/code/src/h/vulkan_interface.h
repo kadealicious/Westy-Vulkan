@@ -1,33 +1,37 @@
 #ifndef VULKAN_INTERFACE_H_
 #define VULKAN_INTERFACE_H_
 
+
 #include<stdbool.h>
-
 #include <vulkan/vulkan.h>
-
 #include"shader.h"
 
-#define NUM_MAX_PIPELINES 100
 #define NUM_MAX_FRAMES_IN_FLIGHT 2
+
 
 // Queue family storage.
 typedef struct wsVulkanQueueFamilies {
+	
 	// Used for drawing graphics!
-	uint32_t ndx_graphics_family;// Index of graphical queue family.
 	bool has_graphics_family;// Have we found a graphical queue family?
+	uint32_t ndx_graphics_family;// Index of graphical queue family.
 	VkQueue graphics_queue;	// Graphics queue family.
 	
 	// Used for presenting surfaces to the window.
-	uint32_t ndx_present_family;// Index of presentation queue family.
 	bool has_present_family;// Have we found a presentation queue family?
+	uint32_t ndx_present_family;// Index of presentation queue family.
 	VkQueue present_queue;	// Presentation queue family.
 	
 } wsVulkanQueueFamilies;
 
-// Swap chain support details.
+
+// Swap Chain storage.
 typedef struct wsVulkanSwapChain {
-	VkSwapchainKHR sc;			// Actual Vulkan swap chain object.
-	VkFramebuffer* framebuffers;// Stores framebuffers for rendering images to the swap chain!
+	
+	VkSwapchainKHR sc;						// Actual Vulkan swap chain instance.
+	VkFramebuffer* framebuffers;			// Stores framebuffers for rendering images to the swap chain!
+	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
+	uint32_t current_frame;					// Stores current frame we are cycled to in the swapchain.
 	
 	VkExtent2D extent;
 	uint32_t num_images;		// Number of images allowed for swapchain buffering.  Default is 4.
@@ -43,20 +47,18 @@ typedef struct wsVulkanSwapChain {
 	VkPresentModeKHR* present_modes;// List of supported presentation modes.
 	uint32_t num_present_modes;		// Number of supported presentation modes.
 	
-	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
-
 } wsVulkanSwapChain;
+
 
 // Vulkan object management.
 typedef struct wsVulkan {
-	VkInstance instance;	// Main Vulkan instance.
-	VkSurfaceKHR surface;	// Window surface for drawing.
+	
+	VkInstance instance;					// Main Vulkan instance.
 	VkPhysicalDevice	physical_device;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
 	VkDevice			logical_device;		// Primary logical device used to interface with the physical device.
 	VkDebugUtilsMessengerEXT debug_messenger;	// Main debug messenger.
 	
 	wsVulkanQueueFamilies queues;	// Contains all queue data.
-	
 	VkCommandPool commandpool;		// Pool for sending queued and sending to Vulkan for execution.
 	VkCommandBuffer* commandbuffers;// Buffer(s) used for recording commands to for sending to command pool.
 	
@@ -68,18 +70,22 @@ typedef struct wsVulkan {
 	VkRenderPass renderpass;	// Contains the render pass data.
 	VkPipelineLayout pipeline_layout;	// Contains the pipeline layout data.
 	VkPipeline pipeline;	// Contains all graphics pipeline data.
-	uint8_t pipelineIDs[NUM_MAX_PIPELINES];	// Holds IDs of all graphics pipelines. // TODO: REMOVE THIS!!!
+	
 	wsShader shader;	// Used for loading and interfacing with shaders.
 	
 	uint8_t windowID;	// Used for interfacing with GLFW window.
+	VkSurfaceKHR surface;	// Window surface for drawing.
+	
 } wsVulkan;
+
 
 // Vulkan interfacing functions.
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
-VkResult wsVulkanDrawFrame(wsVulkan* vk, uint32_t* current_frame_ptr);
+VkResult wsVulkanDrawFrame(wsVulkan* vk);
 void wsVulkanStop(wsVulkan* vk);
 
 // Self-explanatory.
 void wsVulkanSetDebug(uint8_t debug_mode);
+
 
 #endif
