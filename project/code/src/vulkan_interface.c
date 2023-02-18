@@ -77,6 +77,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 uint8_t debug;
 void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
+
+
+
+// TODO: MAKE THIS WORK WITH SWITCH STATEMENTS INSTEAD OF IFS.
+
 // Generic print statements.
 enum {WS_NONE = INT32_MIN};
 void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result) {
@@ -132,7 +137,7 @@ void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t 
 
 // Call after wsWindowInit().
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
-	printf("---Begin Vulkan Initialization!---\n");
+	printf("\n---Begin Vulkan Initialization!---\n");
 
 	// Specify which window we will be rendering to.
 	vk->windowID = windowID;
@@ -271,31 +276,31 @@ void wsVulkanStop(wsVulkan* vk) {
 	// Destroy all sync objects.
 	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
 		vkDestroySemaphore(vk->logical_device, vk->img_available_semaphores[i], NULL);
-		printf("Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		printf("INFO: Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
 		vkDestroySemaphore(vk->logical_device, vk->render_finish_semaphores[i], NULL);
-		printf("Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		printf("INFO: Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
 		vkDestroyFence(vk->logical_device, vk->inflight_fences[i], NULL);
-		printf("Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
+		printf("INFO: Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
 	}
 	
 	vkDestroyCommandPool(vk->logical_device, vk->commandpool, NULL);
-	printf("Vulkan command pool destroyed!\n");
+	printf("INFO: Vulkan command pool destroyed!\n");
 	
 	// Destroy Graphics Pipeline & Pipeline Layout.
 	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);
-	printf("Vulkan graphics pipeline destroyed!\n");
+	printf("INFO: Vulkan graphics pipeline destroyed!\n");
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);
-	printf("Vulkan pipeline layout destroyed!\n");
+	printf("INFO: Vulkan pipeline layout destroyed!\n");
 	
 	// Destroy individual framebuffers within swapchain.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
 		vkDestroyFramebuffer(vk->logical_device, vk->swapchain.framebuffers[i], NULL);
 	}
 	free(vk->swapchain.framebuffers);
-	printf("Vulkan framebuffers destroyed!\n");
+	printf("INFO: Vulkan framebuffers destroyed!\n");
 	
 	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);
-	printf("Vulkan render pass destroyed!\n");
+	printf("INFO: Vulkan render pass destroyed!\n");
 	
 	// Unload all shaders.
 	wsShaderUnloadAll(&vk->shader);
@@ -305,22 +310,22 @@ void wsVulkanStop(wsVulkan* vk) {
 		vkDestroyImageView(vk->logical_device, vk->swapchain.image_views[i], NULL);
 	}
 	free(vk->swapchain.image_views);
-	printf("Vulkan image views destroyed!\n");
+	printf("INFO: Vulkan image views destroyed!\n");
 
 	// Destroy swap chain.
 	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain.sc, NULL);
 	free(vk->swapchain.formats);
 	free(vk->swapchain.present_modes);
 	free(vk->swapchain.images);
-	printf("Vulkan swap chain destroyed!\n");
+	printf("INFO: Vulkan swap chain destroyed!\n");
 	
 	// Destroy logical device, surface, & instance!
 	vkDestroyDevice(vk->logical_device, NULL);
-	printf("Vulkan logical device destroyed!\n");
+	printf("INFO: Vulkan logical device destroyed!\n");
 	vkDestroySurfaceKHR(vk->instance, vk->surface, NULL);
-	printf("Vulkan surface destroyed!\n");
+	printf("INFO: Vulkan surface destroyed!\n");
 	vkDestroyInstance(vk->instance, NULL);
-	printf("Vulkan instance destroyed!\n");
+	printf("INFO: Vulkan instance destroyed!\n");
 }
 
 VkResult wsVulkanCreateSyncObjects(wsVulkan* vk) {
@@ -470,7 +475,7 @@ VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk) {
 			break;
 	}
 	
-	printf("%i/%i Vulkan framebuffers created!\n", vk->swapchain.num_images, vk->swapchain.num_images);
+	printf("INFO: %i/%i Vulkan framebuffers created!\n", vk->swapchain.num_images, vk->swapchain.num_images);
 	return result;
 }
 
@@ -814,7 +819,7 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
 	
 	if(num_created != vk->swapchain.num_images) {
 		printf("ERROR: Only %i/%i image views created!\n", num_created, vk->swapchain.num_images);
-	} else printf("%i/%i Vulkan image views created!\n", num_created, vk->swapchain.num_images);
+	} else printf("INFO: %i/%i Vulkan image views created!\n", num_created, vk->swapchain.num_images);
 	return num_created;
 }
 
@@ -875,7 +880,7 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	// Set current swap chain image format for easier access.
 	vk->swapchain.image_format = vk->swapchain.surface_format.format;
 
-	printf("Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
+	printf("INFO: Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
 		vk->swapchain.extent.width, vk->swapchain.extent.height, vk->swapchain.surface_format.format, vk->swapchain.present_mode);
 	
 	wsVulkanPrint("swap chain creation", WS_NONE, WS_NONE, WS_NONE, result);
@@ -1033,7 +1038,7 @@ VkResult wsVulkanCreateLogicalDevice(wsVulkan* vk, uint32_t num_validation_layer
 	vkGetDeviceQueue(vk->logical_device, vk->queues.ndx_graphics_family, 0, &vk->queues.graphics_queue);
 	vkGetDeviceQueue(vk->logical_device, vk->queues.ndx_present_family, 0, &vk->queues.present_queue);
 	
-	printf("%i unique Vulkan queue families exist; indices are as specified:\n", num_unique_queue_families);
+	printf("INFO: %i unique Vulkan queue families exist; indices are as specified:\n", num_unique_queue_families);
 	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->queues.ndx_graphics_family, vk->queues.ndx_present_family);
 	
 	
@@ -1114,7 +1119,7 @@ bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
 	int32_t max_score = -1;
 	int32_t ndx_GPU = -1;
 	
-	printf("Rating %i GPU(s)...\n", num_GPUs);
+	printf("INFO: Rating %i GPU(s)...\n", num_GPUs);
 	
 	for(int32_t i = 0; i < num_GPUs; i++) {	
 		printf("GPU %i: \t", i);
@@ -1137,7 +1142,7 @@ bool wsVulkanPickPhysicalDevice(wsVulkan* vk) {
 		
 		// TODO: Make this list the properties of chosen GPU.
 		
-		printf("Found GPU with proper Vulkan support!\n");
+		printf("INFO: Found GPU with proper Vulkan support!\n");
 		return true;
 		
 	} else {
@@ -1254,7 +1259,7 @@ VkResult wsVulkanInitDebugMessenger(wsVulkan* vk) {
 
 void wsVulkanStopDebugMessenger(wsVulkan* vk) {
 	wsVulkanDestroyDebugUtilsMessengerEXT(vk->instance, vk->debug_messenger, NULL);
-	printf("Vulkan debug messenger destroyed!\n");
+	printf("INFO: Vulkan debug messenger destroyed!\n");
 }
 
 // Vulkan proxy function; Create debug messenger.
@@ -1349,7 +1354,7 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* create_info) {
 	create_info->ppEnabledExtensionNames = required_extensions;
 	
 	// List all required extensions.
-	printf("%i Vulkan extension(s) required by GLFW: \n", num_required_extensions);
+	printf("INFO: %i Vulkan extension(s) required by GLFW: \n", num_required_extensions);
 	for(int32_t i = 0; i < num_required_extensions; i++) {
 		printf("\t%s\n", required_extensions[i]);
 	}
@@ -1441,7 +1446,7 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	create_info->enabledLayerCount = num_required_layers;
 	create_info->ppEnabledLayerNames = (const char**)required_layers;
 	
-	printf("%i Vulkan validation layer(s) required: \n", num_required_layers);
+	printf("INFO: %i Vulkan validation layer(s) required: \n", num_required_layers);
 	
 	for(int32_t i = 0; i < num_required_layers; i++) {
 		printf("\t%s\n", required_layers[i]);

@@ -13,7 +13,7 @@ void wsShaderInit(wsShader* shd) {
         shd->isloaded[i] = false;
     }
 
-    printf("Shaders initialized!\n");
+    printf("INFO: Shaders initialized!\n");
 }
 
 uint8_t wsShaderLoad(wsShader* shd, const char* path) {
@@ -55,7 +55,7 @@ uint8_t wsShaderLoad(wsShader* shd, const char* path) {
     
     // Used to query if we have unloaded shader yet.
     shd->isloaded[current_shaderID] = true;
-    printf("Shader ID %i loaded from path \"%s\"!\n", current_shaderID, path);
+    printf("INFO: Shader ID %i loaded from path \"%s\"!\n", current_shaderID, path);
 
     return current_shaderID++;
 }
@@ -65,7 +65,7 @@ void wsShaderUnloadAll(wsShader* shd) {
     for(uint8_t i = 0; i < NUM_MAX_SHADERS; i++) {
         wsShaderUnload(shd, i);
     }
-    printf("Shaders unloaded!\n");
+    printf("INFO: All shaders unloaded!\n");
 }
 
 void wsShaderUnload(wsShader* shd, uint8_t shaderID) {
@@ -74,6 +74,6 @@ void wsShaderUnload(wsShader* shd, uint8_t shaderID) {
         free(shd->shader_data[shaderID]);
         shd->isloaded[shaderID] = false;
 
-        printf("Shader ID %i unloaded!\n", shaderID);
+        printf("INFO: Shader ID %i unloaded!\n", shaderID);
     }
 }

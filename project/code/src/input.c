@@ -26,7 +26,7 @@ void wsInputInit(uint8_t windowID, float mouse_sensitivity) {
 	glfwSetCursorPosCallback(wsWindowGetPtr(windowID), wsInputCursorPosCallback);
 	glfwSetScrollCallback(wsWindowGetPtr(windowID), wsInputScrollCallback);
 
-    printf("Input initialized: window ID %i, mouse sens %f\n", windowID, mouse_sensitivity);
+    printf("INFO: Input initialized: window ID %i, mouse sens %f\n", windowID, mouse_sensitivity);
 }
 
 int wsInputGetKeyLast()	{ return key_last; }

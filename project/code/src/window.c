@@ -41,7 +41,7 @@ uint8_t wsWindowInit(uint16_t window_width, uint16_t window_height) {
 	width[windowID] = window_width;
 	height[windowID] = window_height;
 	window_ptr[windowID] = glfwCreateWindow(wsWindowGetWidth(windowID), wsWindowGetHeight(windowID), "Westy Vulkan", NULL, NULL);
-	printf("Window %i created: res %ix%i\n", windowID, window_width, window_height);
+	printf("INFO: GLFW Window %i created: res %ix%i\n", windowID, window_width, window_height);
 	
 	windowID++;
 	return windowID - 1;
@@ -51,5 +51,5 @@ void wsWindowExit(uint8_t windowID) {
 	glfwDestroyWindow(wsWindowGetPtr(windowID));
 	glfwTerminate();
 	
-	printf("Window %i destroyed!\n", windowID);
+	printf("INFO: GLFW Window %i destroyed!\n", windowID);
 }
