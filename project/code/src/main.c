@@ -22,7 +22,7 @@ void wsGLFWErrorCallback(int code, const char* description);
 
 
 int main(int argc, char* argv[]) {
-	printf("===Begin%s===\n", DEBUG ? " Debug" : "");
+	printf("===BEGIN%s===\n", DEBUG ? " DEBUG" : "");
 	
 	
 	// Initialize GLFW.
@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
 	
 	
 	// Main loop.
-	printf("\n===Start%s Run===\n", DEBUG ? " Debug" : "");
+	printf("\n===START%s RUN===\n", DEBUG ? " DEGUB" : "");
 	
 	while(!glfwWindowShouldClose(window)) {
 		
@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
 	}
-	printf("===Stop%s Run===\n\n", DEBUG ? " Debug" : "");
+	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	
 	
 	// Program exit procedure.
@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
 	wsWindowExit(windowID);
 	
 	
-	printf("===End%s===\n", DEBUG ? " Debug" : "");
+	printf("===END%s===\n", DEBUG ? " DEBUG" : "");
 	return 0;
 }
 

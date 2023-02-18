@@ -137,7 +137,7 @@ void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t 
 
 // Call after wsWindowInit().
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
-	printf("\n---Begin Vulkan Initialization!---\n");
+	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
 
 	// Specify which window we will be rendering to.
 	vk->windowID = windowID;
@@ -201,7 +201,7 @@ void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	wsVulkanCreateSyncObjects(vk);		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
 	
 	
-	printf("---End Vulkan Initialization!---\n");
+	printf("---END VULKAN INITIALIZATION---\n");
 }
 VkResult wsVulkanDrawFrame(wsVulkan* vk) {
 	
