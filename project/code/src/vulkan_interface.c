@@ -41,8 +41,10 @@ void wsVulkanChooseSwapExtent(wsVulkan* vk);								// Choose swap chain image r
 void wsVulkanChooseSwapPresentMode(wsVulkanSwapChain* swapchain_info);		// Choose swap chain presentation mode.
 
 // Low-level Vulkan components.
-VkResult wsVulkanCreateSwapChain(wsVulkan* vk);									// Creates a swap chain for image buffering.
-uint32_t wsVulkanCreateImageViews(wsVulkan* vk);								// Creates image views viewing swap chain images; returns number of image views created successfully.
+VkResult wsVulkanCreateSwapChain(wsVulkan* vk);			// Creates a swap chain for image buffering.
+void wsVulkanRecreateSwapChain(wsVulkan* vk);		// Recreates the swap chain when it is no longer compatible with the window surface (typically on resize).
+void wsVulkanDestroySwapChain(wsVulkan* vk);			// Destroys swap chain.
+uint32_t wsVulkanCreateImageViews(wsVulkan* vk);		// Creates image views viewing swap chain images; returns number of image views created successfully.
 VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk);		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
 VkResult wsVulkanCreateSurface(wsVulkan* vk);			// Creates a surface for drawing to the screen; stores inside of struct vk.
 VkResult wsVulkanCreateRenderPass(wsVulkan* vk);		// Creates a render pass; stores inside of struct vk.
@@ -72,6 +74,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 	VkDebugUtilsMessageTypeFlagsEXT msg_type, 
 	const VkDebugUtilsMessengerCallbackDataEXT* callback_data, 
 	void* user_data);
+
+// Callbacks.
+void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);
 
 // Debug mode.
 uint8_t debug;
@@ -139,8 +144,12 @@ void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t 
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID) {
 	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
 
+
 	// Specify which window we will be rendering to.
 	vk->windowID = windowID;
+	
+	// Ensure framebuffer is not immediately and unnecessarily resized.
+	vk->swapchain.framebuffer_hasresized = false;
 
 
 	// Specify application info and store inside struct create_info.
@@ -207,11 +216,30 @@ VkResult wsVulkanDrawFrame(wsVulkan* vk) {
 	
 	// Wait for any important GPU tasks to finish up first.
 	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame], VK_TRUE, UINT64_MAX);
+	
+	// Acquire next swapchain image.  If out of date or suboptimal, recreate it!
+	uint32_t img_ndx;
+	VkResult result = vkAcquireNextImageKHR(vk->logical_device, vk->swapchain.sc, UINT64_MAX, vk->img_available_semaphores[vk->swapchain.current_frame], VK_NULL_HANDLE, &img_ndx);
+	
+	switch(result) {
+		
+		case VK_SUCCESS: 
+		case VK_SUBOPTIMAL_KHR: 
+			break;
+			
+		case VK_ERROR_OUT_OF_DATE_KHR: 
+			printf("WARNING: Vulkan swap chain configuration found to be out of date while acquiring next image; recreating!\n");
+			wsVulkanRecreateSwapChain(vk);
+			return result;
+		
+		default: 
+			printf("ERROR: Vulkan swap chain failed to acquire next image with result code %i!", result);
+			return result;
+	}
+	
+	// Only reset fences if we know we will be submitting work to Vulkan with it.
 	vkResetFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame]);
 	
-	// Acquire next swapchain image.
-	uint32_t img_ndx;
-	vkAcquireNextImageKHR(vk->logical_device, vk->swapchain.sc, UINT64_MAX, vk->img_available_semaphores[vk->swapchain.current_frame], VK_NULL_HANDLE, &img_ndx);
 	
 	// Reset and record command buffer for submission to Vulkan.
 	vkResetCommandBuffer(vk->commandbuffers[vk->swapchain.current_frame], 0);
@@ -236,7 +264,7 @@ VkResult wsVulkanDrawFrame(wsVulkan* vk) {
 	submit_info.pSignalSemaphores = signal_semaphores;
 	
 	// Submit queue to be executed by Vulkan.
-	VkResult result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fences[vk->swapchain.current_frame]);
+	result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fences[vk->swapchain.current_frame]);
 	wsVulkanPrintQuiet("draw command buffer submission", WS_NONE, WS_NONE, WS_NONE, result);
 	
 	
@@ -256,13 +284,41 @@ VkResult wsVulkanDrawFrame(wsVulkan* vk) {
 	
 	
 	// DRAW!!!  TO!!!!!!  SCREEN!!!!!!!!!  AAAAAAAAAHHHHHHHHH!!!!!!!!!!!!!!!!!!
-	vkQueuePresentKHR(vk->queues.present_queue, &present_info);
+	result = vkQueuePresentKHR(vk->queues.present_queue, &present_info);
 	
-	vk->swapchain.current_frame++;
-	vk->swapchain.current_frame %= NUM_MAX_FRAMES_IN_FLIGHT;
+	if(vk->swapchain.framebuffer_hasresized) {
+		vk->swapchain.framebuffer_hasresized = false;
+		printf("WARNING: Vulkan framebuffer found to be wrong size while presenting image; recreating!\n");
+		wsVulkanRecreateSwapChain(vk);
+		return result;
+	}
+	// Is it necessary to check this again?  Find out!
+	switch(result) {
+		
+		case VK_SUCCESS: 
+			break;
+			
+		case VK_ERROR_OUT_OF_DATE_KHR: 
+			printf("WARNING: Vulkan swap chain configuration found to be out of date while presenting image; recreating!\n");
+			wsVulkanRecreateSwapChain(vk);
+			return result;
+		
+		case VK_SUBOPTIMAL_KHR: 
+			printf("WARNING: Vulkan swap chain configuration found to be suboptimal while presenting image; recreating!\n");
+			wsVulkanRecreateSwapChain(vk);
+			return result;
+		
+		default: 
+			printf("ERROR: Vulkan swap chain failed to present image with result code %i!", result);
+			return result;
+	}
+	
+	
+	vk->swapchain.current_frame = (vk->swapchain.current_frame + 1) % NUM_MAX_FRAMES_IN_FLIGHT;
 	
 	return VK_SUCCESS;
 }
+
 void wsVulkanStop(wsVulkan* vk) {
 	
 	// Wait for all asynchronous elements to finish execution and return to an idle state before continuing on.
@@ -292,32 +348,14 @@ void wsVulkanStop(wsVulkan* vk) {
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);
 	printf("INFO: Vulkan pipeline layout destroyed!\n");
 	
-	// Destroy individual framebuffers within swapchain.
-	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
-		vkDestroyFramebuffer(vk->logical_device, vk->swapchain.framebuffers[i], NULL);
-	}
-	free(vk->swapchain.framebuffers);
-	printf("INFO: Vulkan framebuffers destroyed!\n");
+	// Destroy swap chain.
+	wsVulkanDestroySwapChain(vk);
 	
 	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);
 	printf("INFO: Vulkan render pass destroyed!\n");
 	
 	// Unload all shaders.
 	wsShaderUnloadAll(&vk->shader);
-
-	// Destroy swap chain image views.
-	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
-		vkDestroyImageView(vk->logical_device, vk->swapchain.image_views[i], NULL);
-	}
-	free(vk->swapchain.image_views);
-	printf("INFO: Vulkan image views destroyed!\n");
-
-	// Destroy swap chain.
-	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain.sc, NULL);
-	free(vk->swapchain.formats);
-	free(vk->swapchain.present_modes);
-	free(vk->swapchain.images);
-	printf("INFO: Vulkan swap chain destroyed!\n");
 	
 	// Destroy logical device, surface, & instance!
 	vkDestroyDevice(vk->logical_device, NULL);
@@ -326,6 +364,11 @@ void wsVulkanStop(wsVulkan* vk) {
 	printf("INFO: Vulkan surface destroyed!\n");
 	vkDestroyInstance(vk->instance, NULL);
 	printf("INFO: Vulkan instance destroyed!\n");
+}
+
+void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height) {
+	wsVulkan* vk = glfwGetWindowUserPointer(window);
+	vk->swapchain.framebuffer_hasresized = true;
 }
 
 VkResult wsVulkanCreateSyncObjects(wsVulkan* vk) {
@@ -470,7 +513,7 @@ VkResult wsVulkanCreateFrameBuffers(wsVulkan* vk) {
 		framebuffer_info.layers = 1;
 		
 		result = vkCreateFramebuffer(vk->logical_device, &framebuffer_info, NULL, &vk->swapchain.framebuffers[i]);
-		wsVulkanPrint("framebuffer creation", WS_NONE, i, vk->swapchain.num_images, result);
+		wsVulkanPrintQuiet("framebuffer creation", WS_NONE, (i + 1), vk->swapchain.num_images, result);
 		if(result != VK_SUCCESS)
 			break;
 	}
@@ -825,7 +868,7 @@ uint32_t wsVulkanCreateImageViews(wsVulkan* vk) {
 
 VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	// Initialize swap chain within struct vk.
-	// wsVulkanQuerySwapChainSupport(vk);
+	wsVulkanQuerySwapChainSupport(vk);
 	wsVulkanChooseSwapSurfaceFormat(&vk->swapchain);
 	wsVulkanChooseSwapPresentMode(&vk->swapchain);
 	wsVulkanChooseSwapExtent(vk);
@@ -887,6 +930,53 @@ VkResult wsVulkanCreateSwapChain(wsVulkan* vk) {
 	return result;
 }
 
+void wsVulkanRecreateSwapChain(wsVulkan* vk) {
+	
+	// If window is minimized, pause events and wait for something to draw to again!
+	int32_t width = 0, height = 0;
+	glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
+	while(width == 0 || height == 0) {
+		glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
+		glfwWaitEvents();
+	}
+	
+	
+	// Wait until we can safely destroy and recreate resources.
+	vkDeviceWaitIdle(vk->logical_device);
+	
+	// Destroy swap chain and its dependent components.
+	wsVulkanDestroySwapChain(vk);
+	
+	// Recreate the swap chain and its derivative components.
+	wsVulkanCreateSwapChain(vk);
+	wsVulkanCreateImageViews(vk);
+	wsVulkanCreateFrameBuffers(vk);
+}
+
+void wsVulkanDestroySwapChain(wsVulkan* vk) {
+	
+	// Destroy individual framebuffers within swapchain.
+	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
+		vkDestroyFramebuffer(vk->logical_device, vk->swapchain.framebuffers[i], NULL);
+	}
+	free(vk->swapchain.framebuffers);
+	printf("INFO: Vulkan framebuffers destroyed!\n");
+	
+	// Destroy swap chain image views.
+	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
+		vkDestroyImageView(vk->logical_device, vk->swapchain.image_views[i], NULL);
+	}
+	free(vk->swapchain.image_views);
+	printf("INFO: Vulkan image views destroyed!\n");
+
+	// Destroy swap chain.
+	vkDestroySwapchainKHR(vk->logical_device, vk->swapchain.sc, NULL);
+	free(vk->swapchain.formats);
+	free(vk->swapchain.present_modes);
+	free(vk->swapchain.images);
+	printf("INFO: Vulkan swap chain destroyed!\n");
+}
+
 // Choose a nice resolution to draw swap chain images at.
 uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num < min ? min : num;return t > max ? max : t;}
 void wsVulkanChooseSwapExtent(wsVulkan* vk) {
@@ -901,7 +991,7 @@ void wsVulkanChooseSwapExtent(wsVulkan* vk) {
 		// Query GLFW Window framebuffer size.
 		int width, height;
 		glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
-
+		
 		// Set extent width.
 		swapchain_info->extent.width = clamp((uint32_t)width, capabilities->minImageExtent.width, capabilities->maxImageExtent.width);
 		swapchain_info->extent.height = clamp((uint32_t)height, capabilities->minImageExtent.height, capabilities->maxImageExtent.height);

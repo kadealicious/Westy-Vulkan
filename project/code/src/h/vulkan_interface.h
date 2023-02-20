@@ -32,6 +32,7 @@ typedef struct wsVulkanSwapChain {
 	VkFramebuffer* framebuffers;			// Stores framebuffers for rendering images to the swap chain!
 	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
 	uint32_t current_frame;					// Stores current frame we are cycled to in the swapchain.
+	bool framebuffer_hasresized;			// Has our framebuffer been resized?
 	
 	VkExtent2D extent;
 	uint32_t num_images;		// Number of images allowed for swapchain buffering.  Default is 4.
@@ -83,6 +84,9 @@ typedef struct wsVulkan {
 void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
 VkResult wsVulkanDrawFrame(wsVulkan* vk);
 void wsVulkanStop(wsVulkan* vk);
+
+// Used for interfacing in window.c.
+void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);
 
 // Self-explanatory.
 void wsVulkanSetDebug(uint8_t debug_mode);

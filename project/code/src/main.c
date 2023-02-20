@@ -25,8 +25,12 @@ int main(int argc, char* argv[]) {
 	printf("===BEGIN%s===\n", DEBUG ? " DEBUG" : "");
 	
 	
+	// All Vulkan app data goes here: 
+	wsVulkan vk = {};
+	
+	
 	// Initialize GLFW.
-	uint8_t windowID = wsWindowInit(640, 480);
+	uint8_t windowID = wsWindowInit(640, 480, &vk);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	glfwSetErrorCallback(&wsGLFWErrorCallback);
 	
@@ -34,7 +38,6 @@ int main(int argc, char* argv[]) {
 	wsInputInit(windowID, 0.3f);
 	
 	// Initialize Vulkan.
-	wsVulkan vk = {};
 	wsVulkanSetDebug(DEBUG);
 	wsVulkanInit(&vk, windowID);
 	

@@ -29,19 +29,23 @@ int8_t wsWindowGetID(GLFWwindow* window) {
 }
 
 // Call before wsVulkanInit().  Returns window ID.
-uint8_t wsWindowInit(uint16_t window_width, uint16_t window_height) {
+uint8_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsVulkan* vk) {
 	static uint8_t windowID = 0;// Current window ID.
 	
 	glfwInit();
 	
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 	
 	width[windowID] = window_width;
 	height[windowID] = window_height;
 	window_ptr[windowID] = glfwCreateWindow(wsWindowGetWidth(windowID), wsWindowGetHeight(windowID), "Westy Vulkan", NULL, NULL);
 	printf("INFO: GLFW Window %i created: res %ix%i\n", windowID, window_width, window_height);
+	
+	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);
+	// Allow Vulkan to resize its components when the window resizes.
+	glfwSetFramebufferSizeCallback(wsWindowGetPtr(windowID), wsVulkanFramebufferResizeCallback);
 	
 	windowID++;
 	return windowID - 1;
