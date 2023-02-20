@@ -12,6 +12,10 @@
 #include"h/shader.h"
 
 
+// -------------------------------- //
+// Function declaration start here! //
+// -------------------------------- //
+
 // Debug mode.
 uint8_t debug;
 void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
@@ -72,7 +76,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 // -------------------------------- //
 // Function definitions start here! //
 // -------------------------------- //
-
 
 // Print statements for things that return a VkResult.
 enum WS_ID_STATES {WS_NONE = INT16_MIN, WS_UNKNOWN};
