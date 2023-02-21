@@ -6,10 +6,11 @@
 #include <vulkan/vulkan.h>
 #include"shader.h"
 
+
 #define NUM_MAX_FRAMES_IN_FLIGHT 2
 
 
-// Queue family storage.
+// All the data Vulkan could possibly want!
 typedef struct wsVulkanQueueFamilies {
 	
 	// Used for drawing graphics!
@@ -23,9 +24,6 @@ typedef struct wsVulkanQueueFamilies {
 	VkQueue present_queue;	// Presentation queue family.
 	
 } wsVulkanQueueFamilies;
-
-
-// Swap Chain storage.
 typedef struct wsVulkanSwapChain {
 	
 	VkSwapchainKHR sc;						// Actual Vulkan swap chain instance.
@@ -49,9 +47,6 @@ typedef struct wsVulkanSwapChain {
 	uint32_t num_present_modes;		// Number of supported presentation modes.
 	
 } wsVulkanSwapChain;
-
-
-// Vulkan object management.
 typedef struct wsVulkan {
 	
 	VkInstance instance;					// Main Vulkan instance.
@@ -80,15 +75,12 @@ typedef struct wsVulkan {
 } wsVulkan;
 
 
-// Vulkan interfacing functions.
-void wsVulkanInit(wsVulkan* vk, uint8_t windowID);
-VkResult wsVulkanDrawFrame(wsVulkan* vk);
-void wsVulkanStop(wsVulkan* vk);
+// Vulkan external interfacing functions.
+void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID);
+VkResult wsVulkanDrawFrame();
+void wsVulkanStop();
 
-// Used for interfacing in window.c.
-void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);
-
-// Self-explanatory.
+void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Used for interfacing in window.c.
 void wsVulkanSetDebug(uint8_t debug_mode);
 
 
