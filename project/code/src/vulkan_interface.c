@@ -10,14 +10,12 @@
 #include"h/vulkan_interface.h"
 #include"h/window.h"
 #include"h/shader.h"
+#include"h/model.h"
 
 
-wsVulkan* vk;	// Contains pointer to all Vulkan data.
+// Contains pointer to all Vulkan data.
+wsVulkan* vk;
 
-
-// -------------------------------- //
-// Function declaration start here! //
-// -------------------------------- //
 
 // Debug mode.
 uint8_t debug;
@@ -45,7 +43,7 @@ void wsVulkanChooseSwapSurfaceFormat(wsVulkanSwapChain* swapchain_info);	// Choo
 void wsVulkanChooseSwapExtent();								// Choose swap chain image resolution.
 void wsVulkanChooseSwapPresentMode(wsVulkanSwapChain* swapchain_info);		// Choose swap chain presentation mode.
 
-// Low-level Vulkan components.
+// Low-level rendering components.
 VkResult wsVulkanCreateSwapChain();			// Creates a swap chain for image buffering.
 void wsVulkanRecreateSwapChain();		// Recreates the swap chain when it is no longer compatible with the window surface (typically on resize).
 void wsVulkanDestroySwapChain();			// Destroys swap chain.
@@ -76,9 +74,12 @@ void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMess
 static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msg_severity, VkDebugUtilsMessageTypeFlagsEXT msg_type, const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data);
 
 
+
+
 // -------------------------------- //
 // Function definitions start here! //
 // -------------------------------- //
+
 
 // Print statements for things that return a VkResult.
 enum WS_ID_STATES {WS_NONE = INT16_MIN, WS_UNKNOWN};
@@ -141,11 +142,12 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID) {
 	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
 
 	
-	// Point to program data!!!
-	vk = vulkan_data;
+	vk = vulkan_data;								// Point to program data!!!
 	vk->swapchain.framebuffer_hasresized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
 	
-	vk->windowID = windowID;	// Specify which window we will be rendering to.
+	vk->windowID = windowID;																		// Specify which window we will be rendering to.
+	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
+	glfwSetFramebufferSizeCallback(wsWindowGetPtr(windowID), wsVulkanFramebufferResizeCallback);	// Allow Vulkan to resize its framebuffer when the window resizes.
 
 
 	// Specify application info and store inside struct create_info.
@@ -626,7 +628,7 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	frag_shaderstage_info.pSpecializationInfo = NULL;
 	frag_shaderstage_info.module = frag_module;
 	frag_shaderstage_info.pName = "main";
-
+	
 	// NOTE: Modules destroyed at end of function.
 	VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shaderstage_info, frag_shaderstage_info};
 
@@ -639,12 +641,15 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	VkPipelineVertexInputStateCreateInfo vertexinput_info = {};
 	vertexinput_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	
-	vertexinput_info.vertexBindingDescriptionCount	= 0;
-	vertexinput_info.pVertexBindingDescriptions		= NULL;
 	
-	vertexinput_info.vertexAttributeDescriptionCount= 0;
-	vertexinput_info.pVertexAttributeDescriptions	= NULL;
+	// TODO: FIGURE OUT WHY THIS CRASHES EVERYTHING.  I WANT MY TRIANGLE!
 	
+	VkVertexInputBindingDescription* binding_desc = wsModelGetBindingDescription(0);
+	VkVertexInputAttributeDescription* attribute_desc = wsModelGetAttributeDescriptions(0);
+	vertexinput_info.vertexBindingDescriptionCount	= 1;
+	vertexinput_info.pVertexBindingDescriptions		= binding_desc;
+	vertexinput_info.vertexAttributeDescriptionCount= wsModelGetNumAttributeDescriptions(0);
+	vertexinput_info.pVertexAttributeDescriptions	= &attribute_desc[0];
 	
 	// Configure vertex data assembly method.
 	VkPipelineInputAssemblyStateCreateInfo inputassembly_info = {};
@@ -652,35 +657,11 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	inputassembly_info.topology	= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;	// We are using triangles for our models here.
 	inputassembly_info.primitiveRestartEnable = VK_FALSE;	// Allows for element buffers for splitting up geometry, reusing vertices, reusing indices, etc.
 	
-	/*
-	// Configure viewport.
-	VkViewport viewport;// Viewport for stretching & rendering.
 	
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	
-	viewport.width	= (float)vk->swapchain.extent.width;
-	viewport.height	= (float)vk->swapchain.extent.height;
-	
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-	
-	
-	// Configure scissor window for viewport.
-	VkRect2D scissor;	// Scissor rectangle for the viewport.  Defines region in which pixels are stored.
-	
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	
-	scissor.extent = vk->swapchain.extent;*/
-	
-	
-	// May cause crash when out of scope.  We'll see.
 	// Configure dynamic states that should be allowed to change without reconstructing the whole pipeline.  No performance impact.
 	VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 	VkPipelineDynamicStateCreateInfo dynamicstate_info = {};
 	dynamicstate_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	
 	dynamicstate_info.dynamicStateCount	= 2;
 	dynamicstate_info.pDynamicStates	= dynamic_states;
 	
@@ -688,7 +669,6 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	// Configure viewport info.
 	VkPipelineViewportStateCreateInfo viewport_info = {};
 	viewport_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-	
 	viewport_info.viewportCount	= 1;
 	viewport_info.scissorCount	= 1;
 	
@@ -698,7 +678,6 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	rasterizer_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer_info.depthClampEnable = VK_FALSE;		// Instead of discarding OOB fragments, should we clamp them?
 	rasterizer_info.rasterizerDiscardEnable = VK_FALSE;	// If this is true, geometry will never be passed through the rasterizing stage.
-	
 	rasterizer_info.polygonMode = VK_POLYGON_MODE_FILL;	// Can also be VK_POLYGON_MODE_LINE, or VK_POLYGON_MODE_POINT.
 	rasterizer_info.lineWidth = 1.0f;						// Enabling the wideLines GPU feature is required for any value above 1.0f.
 	

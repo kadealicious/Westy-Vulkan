@@ -3,10 +3,12 @@
 
 #include"h/shader.h"
 
+
 void wsShaderInit(wsShader* shd);
 uint8_t wsShaderLoad(wsShader* shd, const char* path);
 void wsShaderUnloadAll(wsShader* shd);
 void wsShaderUnload(wsShader* shd, uint8_t shaderID);
+
 
 void wsShaderInit(wsShader* shd) {
     for(uint8_t i = 0; i < NUM_MAX_SHADERS; i++) {
@@ -15,7 +17,6 @@ void wsShaderInit(wsShader* shd) {
 
     printf("INFO: Shaders initialized!\n");
 }
-
 uint8_t wsShaderLoad(wsShader* shd, const char* path) {
     enum ERROR_CODES {FILE_NOT_FOUND = (NUM_MAX_SHADERS + 1), REACHED_NUM_MAX_SHADERS};
     // Choose a shaderID to assign.
@@ -59,7 +60,6 @@ uint8_t wsShaderLoad(wsShader* shd, const char* path) {
 
     return current_shaderID++;
 }
-
 void wsShaderUnloadAll(wsShader* shd) {
     
     for(uint8_t i = 0; i < NUM_MAX_SHADERS; i++) {
@@ -67,7 +67,6 @@ void wsShaderUnloadAll(wsShader* shd) {
     }
     printf("INFO: All shaders unloaded!\n");
 }
-
 void wsShaderUnload(wsShader* shd, uint8_t shaderID) {
     
     if(shd->isloaded[shaderID]) {
@@ -77,3 +76,4 @@ void wsShaderUnload(wsShader* shd, uint8_t shaderID) {
         printf("INFO: Shader ID %i unloaded!\n", shaderID);
     }
 }
+

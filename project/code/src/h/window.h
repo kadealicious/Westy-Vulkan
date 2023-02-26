@@ -20,7 +20,7 @@ uint16_t wsWindowGetHeight(uint8_t windowID);
 GLFWwindow* wsWindowGetPtr(uint8_t windowID);
 int16_t wsWindowGetID(GLFWwindow* window);	// Returns -1 if window not found.
 
-int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* window_data, wsVulkan* vulkan_data);
+int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* window_data);
 void wsWindowExit(uint8_t windowID);
 
 #endif

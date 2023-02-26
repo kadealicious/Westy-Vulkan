@@ -4,11 +4,14 @@
 
 
 wsWindow* wnd;	// Contains pointer to all GLFW window data.
-wsVulkan* vk;	// Contains pointer to all Vulkan data.
 
+// GLFW callback functions.
+void wsWindowGLFWErrorCallback(int code, const char* description) {
+	printf("ERROR: GLFW code %i: %s\n", code, description);
+}
 
 // Call before wsVulkanInit().  Returns window ID.
-int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* window_data, wsVulkan* vulkan_data) {
+int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* window_data) {
 	
 	static uint8_t windowID = 0;// Current window ID.
 	
@@ -23,10 +26,11 @@ int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* wi
 	
 	// Point to program data!!!
 	wnd = window_data;
-	vk = vulkan_data;
 	
 	
 	glfwInit();
+	
+	glfwSetErrorCallback(&wsWindowGLFWErrorCallback);
 	
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -37,13 +41,8 @@ int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* wi
 	wnd->ptr[windowID] = glfwCreateWindow(wsWindowGetWidth(windowID), wsWindowGetHeight(windowID), "Westy Vulkan", NULL, NULL);
 	printf("INFO: GLFW Window %i created: res %ix%i\n", windowID, window_width, window_height);
 	
-	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);
-	// Allow Vulkan to resize its components when the window resizes.
-	glfwSetFramebufferSizeCallback(wsWindowGetPtr(windowID), wsVulkanFramebufferResizeCallback);
-	
 	return windowID++;
 }
-
 void wsWindowExit(uint8_t windowID) {
 	glfwDestroyWindow(wsWindowGetPtr(windowID));
 	glfwTerminate();
