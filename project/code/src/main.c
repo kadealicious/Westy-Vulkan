@@ -12,7 +12,7 @@
 #include"h/window.h"
 #include"h/input.h"
 #include"h/vulkan_interface.h"
-#include"h/model.h"
+#include"h/mesh.h"
 
 
 // Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
 	// Program data struct 0-initialization: 
 	wsWindow wnd = {};
 	wsVulkan vk = {};
-	wsModel md = {};
+	wsMesh md;	// Handled in vulkan_interface.c.
 	
 	
 	// Initialize GLFW.
@@ -37,10 +37,9 @@ int main(int argc, char* argv[]) {
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	wsInputInit(windowID, 0.3f);	// Bind keyboard input to our GLFW window.
 	
-	wsModelInit(&md);	// Allow models to exist for Vulkan.
 	// Initialize Vulkan.
 	wsVulkanSetDebug(DEBUG);
-	wsVulkanInit(&vk, windowID);
+	wsVulkanInit(&vk, &md, windowID);
 	
 	
 	// Main loop.
@@ -68,7 +67,6 @@ int main(int argc, char* argv[]) {
 	
 	
 	// Program exit procedure.
-	wsModelStop();
 	wsVulkanStop(&vk);
 	wsWindowExit(windowID);
 	

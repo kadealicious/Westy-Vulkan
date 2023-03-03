@@ -10,7 +10,6 @@
 #include"h/vulkan_interface.h"
 #include"h/window.h"
 #include"h/shader.h"
-#include"h/model.h"
 
 
 // Contains pointer to all Vulkan data.
@@ -22,7 +21,7 @@ uint8_t debug;
 void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
 // Main external calls to Vulkan.
-void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID);
+void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
 VkResult wsVulkanDrawFrame();
 void wsVulkanStop();
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Passed to GLFW for the window resize event.
@@ -59,6 +58,8 @@ VkResult wsVulkanCreateCommandPool();		// Create command pool for queueing comma
 VkResult wsVulkanCreateCommandBuffers();	// Creates command buffer for holding commands.
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
 
+VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
+
 // Queue family management.
 void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
 bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices);	// Checks if all required queue families have been found.
@@ -82,53 +83,53 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 
 
 // Print statements for things that return a VkResult.
-enum WS_ID_STATES {WS_NONE = INT16_MIN, WS_UNKNOWN};
-void wsVulkanPrint(const char* str, int16_t ID, int16_t numerator, int16_t denominator, VkResult result) {
+enum WS_ID_STATES { WS_VULKAN_NULL = INT32_MAX };
+void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result) {
 	
 	// If we have neither an ID nor fraction.
-	if(ID == WS_NONE && numerator == WS_NONE) {
+	if(ID == WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
 		else printf("INFO: Vulkan %s success!\n", str);
 		
 		// If we have no ID but do have a fraction.
-	} else if(ID == WS_NONE && numerator != WS_NONE) {
+	} else if(ID == WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
 		else printf("INFO: Vulkan %s %i/%i success!\n", str, numerator, denominator);
 		
 		// If we have an ID but no fraction.
-	} else if(ID != WS_NONE && numerator == WS_NONE) {
+	} else if(ID != WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
 		else printf("INFO: Vulkan %s w/ ID %i success!\n", str, ID);
 		
 		// If we have both an ID & fraction.
-	} else if(ID != WS_NONE && numerator != WS_NONE) {
+	} else if(ID != WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
 		else printf("INFO: Vulkan %s %i/%i w/ ID %i success!\n", str, numerator, denominator, ID);
 	}
 }
-void wsVulkanPrintQuiet(const char* str, int16_t ID, int16_t numerator, int16_t denominator, VkResult result) {
+void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result) {
 	
 	// If we have neither an ID nor fraction.
-	if(ID == WS_NONE && numerator == WS_NONE) {
+	if(ID == WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
 		
 		// If we have no ID but do have a fraction.
-	} else if(ID == WS_NONE && numerator != WS_NONE) {
+	} else if(ID == WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
 		
 		// If we have an ID but no fraction.
-	} else if(ID != WS_NONE && numerator == WS_NONE) {
+	} else if(ID != WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
 		
 		// If we have both an ID & fraction.
-	} else if(ID != WS_NONE && numerator != WS_NONE) {
+	} else if(ID != WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
 	}
@@ -137,18 +138,22 @@ void wsVulkanPrintQuiet(const char* str, int16_t ID, int16_t numerator, int16_t 
 // Clamp function!  WHY DOESN'T C HAVE THIS BUILT IN
 uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num < min ? min : num;return t > max ? max : t;}
 
-void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID) {
-	// Call after wsWindowInit().
-	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
-
+void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
+{	// Call after wsWindowInit().
 	
+	// Start with stuff *unlikely* to crash the program... right?
 	vk = vulkan_data;								// Point to program data!!!
 	vk->swapchain.framebuffer_hasresized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
+	
+	wsMeshInit(&vk->vertexbuffer_mesh);	// Allow models to exist for Vulkan.
+	mesh_data = &vk->vertexbuffer_mesh;	// Pass this back to main.c for visibility.
 	
 	vk->windowID = windowID;																		// Specify which window we will be rendering to.
 	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
 	glfwSetFramebufferSizeCallback(wsWindowGetPtr(windowID), wsVulkanFramebufferResizeCallback);	// Allow Vulkan to resize its framebuffer when the window resizes.
 
+
+	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
 
 	// Specify application info and store inside struct create_info.
 	VkApplicationInfo app_info;
@@ -173,7 +178,8 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID) {
 	// If debug, we will need this struct in a moment for scope-related reasons in vkCreateInstance().  Otherwise, disregard.
 	VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {};
 	
-	if(debug) {
+	if(debug)
+	{
 		wsVulkanEnableValidationLayers(&create_info);
 		
 		// Allow the debug messenger to debug vkCreateInstance().
@@ -184,13 +190,12 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID) {
 	
 	// Create Vulkan instance!
 	VkResult result = vkCreateInstance(&create_info, NULL, &vk->instance);
-	wsVulkanPrint("instance creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("instance creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	
 	// Sends messages to stdout when debug messages occur.
-	if(debug) {
-		wsVulkanInitDebugMessenger();
-	}
+	if(debug)
+		{ wsVulkanInitDebugMessenger(); }
 	
 	wsVulkanCreateSurface();	// Creates window surface for drawing.
 	
@@ -204,14 +209,15 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID) {
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
 	
 	wsVulkanCreateCommandPool();		// Creates command pool, which is used for executing commands sent via command buffer.
-	wsVulkanCreateCommandBuffers();	// Creates command buffer(s), used for queueing commands for the command pool to execute.
+	wsVulkanCreateVertexBuffer(NULL, 0);		// Creates vertex buffers which hold our vertex input data.
+	wsVulkanCreateCommandBuffers();		// Creates command buffer(s), used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects();		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
 	
 	
 	printf("---END VULKAN INITIALIZATION---\n");
 }
-VkResult wsVulkanDrawFrame() {
-	
+VkResult wsVulkanDrawFrame()
+{
 	// Wait for any important GPU tasks to finish up first.
 	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame], VK_TRUE, UINT64_MAX);
 	
@@ -263,7 +269,7 @@ VkResult wsVulkanDrawFrame() {
 	
 	// Submit queue to be executed by Vulkan.
 	result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fences[vk->swapchain.current_frame]);
-	wsVulkanPrintQuiet("draw command buffer submission", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrintQuiet("draw command buffer submission", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	
 	// Configure presentation specification.
@@ -312,63 +318,49 @@ VkResult wsVulkanDrawFrame() {
 	}
 	
 	
-	vk->swapchain.current_frame = (vk->swapchain.current_frame + 1) % NUM_MAX_FRAMES_IN_FLIGHT;
+	vk->swapchain.current_frame = (vk->swapchain.current_frame + 1) % WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
 	
 	return VK_SUCCESS;
 }
-void wsVulkanStop() {
+void wsVulkanStop()
+{
+	wsMeshStop();	// Stop external systems that Vulkan uses first.
 	
-	// Wait for all asynchronous elements to finish execution and return to an idle state before continuing on.
-	vkDeviceWaitIdle(vk->logical_device);
+	vkDeviceWaitIdle(vk->logical_device);	// Wait for all asynchronous elements to finish execution and return to an idle state before continuing on.sss
+	printf("\n---BEGIN VULKAN TERMINATION---\n");
 	
-	// If in debug mode, destroy debug messenger.
-	if(debug) {
-		wsVulkanStopDebugMessenger();
-	}
+	if(debug)
+		{ wsVulkanStopDebugMessenger(); }
 	
 	// Destroy all sync objects.
-	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
-		vkDestroySemaphore(vk->logical_device, vk->img_available_semaphores[i], NULL);
-		printf("INFO: Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
-		vkDestroySemaphore(vk->logical_device, vk->render_finish_semaphores[i], NULL);
-		printf("INFO: Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
-		vkDestroyFence(vk->logical_device, vk->inflight_fences[i], NULL);
-		printf("INFO: Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), NUM_MAX_FRAMES_IN_FLIGHT);
-	}
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ vkDestroySemaphore(vk->logical_device, vk->img_available_semaphores[i], NULL);	printf("INFO: Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT); }
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ vkDestroySemaphore(vk->logical_device, vk->render_finish_semaphores[i], NULL);	printf("INFO: Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT); }
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ vkDestroyFence(vk->logical_device, vk->inflight_fences[i], NULL);					printf("INFO: Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT); }
 	
-	vkDestroyCommandPool(vk->logical_device, vk->commandpool, NULL);
-	printf("INFO: Vulkan command pool destroyed!\n");
-	
-	// Destroy Graphics Pipeline & Pipeline Layout.
-	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);
-	printf("INFO: Vulkan graphics pipeline destroyed!\n");
-	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);
-	printf("INFO: Vulkan pipeline layout destroyed!\n");
-	
-	// Destroy swap chain.
+	vkDestroyCommandPool(vk->logical_device, vk->commandpool, NULL);		printf("INFO: Vulkan command pool destroyed!\n");
+	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);				printf("INFO: Vulkan graphics pipeline destroyed!\n");
+	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);	printf("INFO: Vulkan pipeline layout destroyed!\n");
 	wsVulkanDestroySwapChain();
-	
-	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);
-	printf("INFO: Vulkan render pass destroyed!\n");
-	
-	// Unload all shaders.
+	vkDestroyBuffer(vk->logical_device, vk->vertexbuffer, NULL);		printf("INFO: Vulkan vertex buffer destroyed!\n");
+	vkFreeMemory(vk->logical_device, vk->vertexbuffer_memory, NULL);	printf("INFO: Vulkan vertex buffer memory freed!\n");
+	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);	printf("INFO: Vulkan render pass destroyed!\n");
 	wsShaderUnloadAll(&vk->shader);
+	vkDestroyDevice(vk->logical_device, NULL);				printf("INFO: Vulkan logical device destroyed!\n");
+	vkDestroySurfaceKHR(vk->instance, vk->surface, NULL);	printf("INFO: Vulkan surface destroyed!\n");
+	vkDestroyInstance(vk->instance, NULL);					printf("INFO: Vulkan instance destroyed!\n");
 	
-	// Destroy logical device, surface, & instance!
-	vkDestroyDevice(vk->logical_device, NULL);
-	printf("INFO: Vulkan logical device destroyed!\n");
-	vkDestroySurfaceKHR(vk->instance, vk->surface, NULL);
-	printf("INFO: Vulkan surface destroyed!\n");
-	vkDestroyInstance(vk->instance, NULL);
-	printf("INFO: Vulkan instance destroyed!\n");
+	printf("---END VULKAN TERMINATION---\n\n");
 }
 
 VkResult wsVulkanCreateSyncObjects() {
 	
 	// Resize arrays to hold all required semaphores & fences.
-	vk->img_available_semaphores= malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
-	vk->render_finish_semaphores= malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
-	vk->inflight_fences			= malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkFence));
+	vk->img_available_semaphores= malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->render_finish_semaphores= malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->inflight_fences			= malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkFence));
 	
 	VkSemaphoreCreateInfo semaphore_info = {};
 	semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -378,23 +370,16 @@ VkResult wsVulkanCreateSyncObjects() {
 	fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;		// Prevents first call to wsVulkanDrawFrame() from hanging up on an unsignaled fence.
 	
 	// Create all semaphores & fences!
-	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
-		
-		VkResult result;
-		
-		result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);
-		wsVulkanPrint("\"image available?\" semaphore creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
-		
-		result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);
-		wsVulkanPrint("\"render finished?\" semaphore creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
-		
-		result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);
-		wsVulkanPrint("\"in flight?\" semaphore creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
-	}
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);	wsVulkanPrint("\"image available?\" semaphore creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);	wsVulkanPrint("\"render finished?\" semaphore creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ VkResult result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);	wsVulkanPrint("\"in flight?\" semaphore creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
 	
 	return VK_SUCCESS;
 }
-VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx) {
+VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t img_ndx) {
 	
 	// Begin recording to the command buffer!
 	VkCommandBufferBeginInfo begin_info = {};
@@ -402,8 +387,8 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx) 
 	begin_info.flags = 0;
 	begin_info.pInheritanceInfo = NULL;
 	
-	VkResult result = vkBeginCommandBuffer(*buffer, &begin_info);
-	wsVulkanPrintQuiet("command buffer recording begin", WS_NONE, WS_NONE, WS_NONE, result);
+	VkResult result = vkBeginCommandBuffer(*commandbuffer, &begin_info);
+	wsVulkanPrintQuiet("command buffer recording begin", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	
 	// Begin render pass.
@@ -420,11 +405,11 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx) 
 	renderpass_info.clearValueCount = 1;
 	renderpass_info.pClearValues = &clear_color;
 	
-	vkCmdBeginRenderPass(*buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(*commandbuffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 	
 	// Bind graphics pipeline, then specify viewport & scissor states for this pipeline.
-	vkCmdBindPipeline(*buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
+	vkCmdBindPipeline(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
 	
 	VkViewport viewport = {};
 	viewport.x = 0.0f;
@@ -433,57 +418,116 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx) 
 	viewport.height = (float)vk->swapchain.extent.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
-	vkCmdSetViewport(*buffer, 0, 1, &viewport);
+	vkCmdSetViewport(*commandbuffer, 0, 1, &viewport);
 	
 	VkRect2D scissor = {};
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
 	scissor.extent = vk->swapchain.extent;
-	vkCmdSetScissor(*buffer, 0, 1, &scissor);
+	vkCmdSetScissor(*commandbuffer, 0, 1, &scissor);
 	
 	
 	// !!!Draw triangle!!!
-	vkCmdDraw(*buffer, 3, 1, 0, 0);
+	VkBuffer vertexbuffers[1] = {vk->vertexbuffer};
+	VkDeviceSize offsets[1] = {0};
+	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
+	vkCmdDraw(*commandbuffer, (uint32_t)vk->vertexbuffer_mesh.num_vertices[0], 1, 0, 0);
 	
 	
 	// End render pass.
-	vkCmdEndRenderPass(*buffer);
+	vkCmdEndRenderPass(*commandbuffer);
 	
 	// End command buffer recording.
-	result = vkEndCommandBuffer(*buffer);
-	wsVulkanPrintQuiet("command buffer recording end", WS_NONE, WS_NONE, WS_NONE, result);
+	result = vkEndCommandBuffer(*commandbuffer);
+	wsVulkanPrintQuiet("command buffer recording end", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 VkResult wsVulkanCreateCommandBuffers() {
 	
 	// Resize command buffers array to contain enough command buffers for each in-flight frame.
-	vk->commandbuffers = malloc(NUM_MAX_FRAMES_IN_FLIGHT * sizeof(VkCommandBuffer));
+	vk->commandbuffers = malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkCommandBuffer));
 	
 	// Specify command buffer allocation configuration.
 	VkCommandBufferAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	alloc_info.commandPool = vk->commandpool;
 	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	alloc_info.commandBufferCount = (uint32_t)NUM_MAX_FRAMES_IN_FLIGHT;
+	alloc_info.commandBufferCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
 	
 	// Allocate all command buffers.
-	for(uint8_t i = 0; i < NUM_MAX_FRAMES_IN_FLIGHT; i++) {
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++) {
 		
 		VkResult result = vkAllocateCommandBuffers(vk->logical_device, &alloc_info, vk->commandbuffers);
-		wsVulkanPrint("command buffer creation", WS_NONE, (i + 1), NUM_MAX_FRAMES_IN_FLIGHT, result);
+		wsVulkanPrint("command buffer creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
 	}
 	
 	return VK_SUCCESS;
 }
-VkResult wsVulkanCreateCommandPool() {
-	
+VkResult wsVulkanCreateCommandPool()
+{
 	VkCommandPoolCreateInfo pool_info = {};
 	pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 	pool_info.queueFamilyIndex = vk->queues.ndx_graphics_family;
 	
 	VkResult result = vkCreateCommandPool(vk->logical_device, &pool_info, NULL, &vk->commandpool);
-	wsVulkanPrint("command pool creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("command pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	return result;
+}
+
+uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memory_properties;
+	vkGetPhysicalDeviceMemoryProperties(vk->physical_device, &memory_properties);
+	
+	for(uint32_t i = 0; i < memory_properties.memoryTypeCount; i++)
+	{
+		// Make sure that we have found the requested memory type and that its read/write properties match our needs.
+		if((type_filter & (1 << i)) && (memory_properties.memoryTypes[i].propertyFlags & properties) == properties)
+			{ return i; }
+	}
+	
+	printf("ERROR: Vulkan memory type not found!\n");
+	return WS_VULKAN_NULL;
+}
+VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
+{
+	// Create vertex buffer.
+	VkBufferCreateInfo buffer_info = {};
+	buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buffer_info.size = wsMeshGetCurrentBufferSize();
+	buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	
+	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, &vk->vertexbuffer);
+	wsVulkanPrint("vertex buffer creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	
+	
+	// Specify vertex buffer memory requirements.
+	VkMemoryRequirements memory_requirements;
+	vkGetBufferMemoryRequirements(vk->logical_device, vk->vertexbuffer, &memory_requirements);
+	
+	VkMemoryAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info.allocationSize = memory_requirements.size;
+	VkMemoryPropertyFlags memory_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+	alloc_info.memoryTypeIndex = wsVulkanFindMemoryType(memory_requirements.memoryTypeBits, memory_properties);
+	
+	// Allocate and bind buffer memory to appropriate vertex buffer.
+	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, &vk->vertexbuffer_memory);
+	wsVulkanPrint("vertex buffer memory allocation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	if(result != VK_SUCCESS)
+		{ return result; }
+	vkBindBufferMemory(vk->logical_device, vk->vertexbuffer, vk->vertexbuffer_memory, 0);
+	
+	wsMeshPrintMeshData();
+	
+	void* buffer_data;
+	vkMapMemory(vk->logical_device, vk->vertexbuffer_memory, 0, buffer_info.size, 0, &buffer_data);
+		memcpy(buffer_data, wsMeshGetVerticesPtr(), (size_t)buffer_info.size);
+	vkUnmapMemory(vk->logical_device, vk->vertexbuffer_memory);
+	
+	// TODO: START AT THE "MEMORY ALLOCATION" SECTION RIGHT AFTER VKALLOCATEMEMORY(): https://vulkan-tutorial.com/en/Vertex_buffers/Vertex_buffer_creation
 	return result;
 }
 
@@ -509,7 +553,7 @@ VkResult wsVulkanCreateFrameBuffers() {
 		framebuffer_info.layers = 1;
 		
 		result = vkCreateFramebuffer(vk->logical_device, &framebuffer_info, NULL, &vk->swapchain.framebuffers[i]);
-		wsVulkanPrintQuiet("framebuffer creation", WS_NONE, (i + 1), vk->swapchain.num_images, result);
+		wsVulkanPrintQuiet("framebuffer creation", WS_VULKAN_NULL, (i + 1), vk->swapchain.num_images, result);
 		if(result != VK_SUCCESS)
 			break;
 	}
@@ -575,7 +619,7 @@ VkResult wsVulkanCreateRenderPass() {
 	
 	// Self-explanatory copypasta code.	
 	VkResult result = vkCreateRenderPass(vk->logical_device, &renderpass_info, NULL, &vk->renderpass);
-	wsVulkanPrint("render pass creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("render pass creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID) {
@@ -589,7 +633,7 @@ VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID) {
 	// Create and return shader module!
 	VkShaderModule module;
 	VkResult result = vkCreateShaderModule(vk->logical_device, &create_info, NULL, &module);
-	wsVulkanPrint("shader module creation", shaderID, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("shader module creation", shaderID, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return module;
 }
 VkResult wsVulkanCreateGraphicsPipeline() {
@@ -641,14 +685,12 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	VkPipelineVertexInputStateCreateInfo vertexinput_info = {};
 	vertexinput_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	
-	
-	// TODO: FIGURE OUT WHY THIS CRASHES EVERYTHING.  I WANT MY TRIANGLE!
-	
-	VkVertexInputBindingDescription* binding_desc = wsModelGetBindingDescription(0);
-	VkVertexInputAttributeDescription* attribute_desc = wsModelGetAttributeDescriptions(0);
+	// Configure how vertices are stored and read through wsMesh.
+	VkVertexInputBindingDescription* binding_desc = wsMeshGetBindingDescription(0);
+	VkVertexInputAttributeDescription* attribute_desc = wsMeshGetAttributeDescriptions(0);
 	vertexinput_info.vertexBindingDescriptionCount	= 1;
 	vertexinput_info.pVertexBindingDescriptions		= binding_desc;
-	vertexinput_info.vertexAttributeDescriptionCount= wsModelGetNumAttributeDescriptions(0);
+	vertexinput_info.vertexAttributeDescriptionCount= wsMeshGetNumAttributeDescriptions(0);
 	vertexinput_info.pVertexAttributeDescriptions	= &attribute_desc[0];
 	
 	// Configure vertex data assembly method.
@@ -755,7 +797,7 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	
 	// Create pipeline layout!  If unsuccessful, say so and return the result code as an integer.
 	VkResult result = vkCreatePipelineLayout(vk->logical_device, &pipelinelayout_info, NULL, &vk->pipeline_layout);
-	wsVulkanPrint("pipeline layout creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("pipeline layout creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	// Specify graphics pipeline creation info.
 	VkGraphicsPipelineCreateInfo pipeline_info = {};
@@ -792,7 +834,7 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
 	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
 	
-	wsVulkanPrint("graphics pipeline creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("graphics pipeline creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 uint32_t wsVulkanCreateImageViews() {
@@ -827,7 +869,7 @@ uint32_t wsVulkanCreateImageViews() {
 		
 		// Create image view for each image view object!
 		VkResult result = vkCreateImageView(vk->logical_device, &create_info, NULL, &vk->swapchain.image_views[i]);
-		wsVulkanPrintQuiet("Image view creation", WS_NONE, i, vk->swapchain.num_images, result);
+		wsVulkanPrintQuiet("Image view creation", WS_VULKAN_NULL, i, vk->swapchain.num_images, result);
 		if(result == VK_SUCCESS) num_created++;
 	}
 	
@@ -896,7 +938,7 @@ VkResult wsVulkanCreateSwapChain() {
 	printf("INFO: Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
 		vk->swapchain.extent.width, vk->swapchain.extent.height, vk->swapchain.surface_format.format, vk->swapchain.present_mode);
 	
-	wsVulkanPrint("swap chain creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("swap chain creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 void wsVulkanRecreateSwapChain() {
@@ -1025,7 +1067,7 @@ VkResult wsVulkanCreateSurface() {
 	// Creates a surface bound to our GLFW window.
 	
 	VkResult result = glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
-	wsVulkanPrint("surface creation for window", vk->windowID, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("surface creation for window", vk->windowID, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char* const* validation_layers) {
@@ -1098,7 +1140,7 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	free(queue_create_infos);
 	
 	
-	wsVulkanPrint("logical device creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("logical device creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 
@@ -1299,7 +1341,7 @@ VkResult wsVulkanInitDebugMessenger() {
 	
 	// Create debug messenger!
 	VkResult result = wsVulkanCreateDebugUtilsMessengerEXT(vk->instance, &create_info, NULL, &vk->debug_messenger);
-	wsVulkanPrint("debug messenger creation", WS_NONE, WS_NONE, WS_NONE, result);
+	wsVulkanPrint("debug messenger creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	return result;
 }
@@ -1336,7 +1378,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 	else if(msg_severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
 		printf("INFO: ");
 	
-	printf("Validation layer says: %s\n", callback_data->pMessage);
+	printf("%s\n", callback_data->pMessage);
 	
 	return VK_FALSE;
 }

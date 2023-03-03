@@ -5,14 +5,16 @@
 #include<stdbool.h>
 #include <vulkan/vulkan.h>
 #include"shader.h"
+#include"mesh.h"
 
 
-#define NUM_MAX_FRAMES_IN_FLIGHT 2
+#define WS_VULKAN_MAX_FRAMES_IN_FLIGHT 2
+#define WS_VULKAN_MAX_VERTEX_BUFFERS 4;
 
 
 // All the data Vulkan could possibly want!
-typedef struct wsVulkanQueueFamilies {
-	
+typedef struct wsVulkanQueueFamilies
+{
 	// Used for drawing graphics!
 	bool has_graphics_family;// Have we found a graphical queue family?
 	uint32_t ndx_graphics_family;// Index of graphical queue family.
@@ -24,8 +26,9 @@ typedef struct wsVulkanQueueFamilies {
 	VkQueue present_queue;	// Presentation queue family.
 	
 } wsVulkanQueueFamilies;
-typedef struct wsVulkanSwapChain {
-	
+
+typedef struct wsVulkanSwapChain
+{
 	VkSwapchainKHR sc;						// Actual Vulkan swap chain instance.
 	VkFramebuffer* framebuffers;			// Stores framebuffers for rendering images to the swap chain!
 	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
@@ -47,8 +50,9 @@ typedef struct wsVulkanSwapChain {
 	uint32_t num_present_modes;		// Number of supported presentation modes.
 	
 } wsVulkanSwapChain;
-typedef struct wsVulkan {
-	
+
+typedef struct wsVulkan
+{
 	VkInstance instance;					// Main Vulkan instance.
 	VkPhysicalDevice	physical_device;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
 	VkDevice			logical_device;		// Primary logical device used to interface with the physical device.
@@ -57,6 +61,10 @@ typedef struct wsVulkan {
 	wsVulkanQueueFamilies queues;	// Contains all queue data.
 	VkCommandPool commandpool;		// Pool for sending queued and sending to Vulkan for execution.
 	VkCommandBuffer* commandbuffers;// Buffer(s) used for recording commands to for sending to command pool.
+	
+	VkBuffer vertexbuffer;				// TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.
+	VkDeviceMemory vertexbuffer_memory;	// Contains memory used by vertex buffer to store all vertices/indices/etc.
+	wsMesh vertexbuffer_mesh;			// Contains all raw vertex/index data.
 	
 	VkSemaphore* img_available_semaphores;	// Used to check if GPU has any image(s) available for rendering.
 	VkSemaphore* render_finish_semaphores;	// Used to check if GPU has finished rendering available image(s).
@@ -76,7 +84,7 @@ typedef struct wsVulkan {
 
 
 // Vulkan external interfacing functions.
-void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID);
+void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
 VkResult wsVulkanDrawFrame();
 void wsVulkanStop();
 
