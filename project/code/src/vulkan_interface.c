@@ -61,7 +61,9 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 
 // Queue family management.
-void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
+uint8_t wsVulkanCountUniqueQueueIndices();
+void wsVulkanPopulateUniqueQueueFamiliesArray();
+uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
 bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices);	// Checks if all required queue families have been found.
 
 // Debug-messenger-related functions.
@@ -208,7 +210,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	wsVulkanCreateGraphicsPipeline();	// Graphics pipeline combines all created objects and information into one abstraction.
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
 	
-	wsVulkanCreateCommandPool();		// Creates command pool, which is used for executing commands sent via command buffer.
+	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	wsVulkanCreateVertexBuffer(NULL, 0);		// Creates vertex buffers which hold our vertex input data.
 	wsVulkanCreateCommandBuffers();		// Creates command buffer(s), used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects();		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
@@ -340,7 +342,11 @@ void wsVulkanStop()
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
 		{ vkDestroyFence(vk->logical_device, vk->inflight_fences[i], NULL);					printf("INFO: Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT); }
 	
-	vkDestroyCommandPool(vk->logical_device, vk->commandpool, NULL);		printf("INFO: Vulkan command pool destroyed!\n");
+	// Free memory associated with queue families.
+	free(vk->queues.unique_queue_family_indices);
+	
+	vkDestroyCommandPool(vk->logical_device, vk->commandpool_graphics, NULL);	printf("INFO: Vulkan graphics/presentation command pool destroyed!\n");
+	vkDestroyCommandPool(vk->logical_device, vk->commandpool_transfer, NULL);	printf("INFO: Vulkan transfer command pool destroyed!\n");
 	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);				printf("INFO: Vulkan graphics pipeline destroyed!\n");
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);	printf("INFO: Vulkan pipeline layout destroyed!\n");
 	wsVulkanDestroySwapChain();
@@ -450,7 +456,7 @@ VkResult wsVulkanCreateCommandBuffers() {
 	// Specify command buffer allocation configuration.
 	VkCommandBufferAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	alloc_info.commandPool = vk->commandpool;
+	alloc_info.commandPool = vk->commandpool_graphics;
 	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	alloc_info.commandBufferCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
 	
@@ -465,13 +471,23 @@ VkResult wsVulkanCreateCommandBuffers() {
 }
 VkResult wsVulkanCreateCommandPool()
 {
-	VkCommandPoolCreateInfo pool_info = {};
-	pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	pool_info.queueFamilyIndex = vk->queues.ndx_graphics_family;
+	VkCommandPoolCreateInfo graphicspool_info = {};
+	graphicspool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	graphicspool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	graphicspool_info.queueFamilyIndex = vk->queues.ndx_graphics_family;
 	
-	VkResult result = vkCreateCommandPool(vk->logical_device, &pool_info, NULL, &vk->commandpool);
-	wsVulkanPrint("command pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	VkResult result = vkCreateCommandPool(vk->logical_device, &graphicspool_info, NULL, &vk->commandpool_graphics);
+	wsVulkanPrint("graphics/presentation command pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	if(result != VK_SUCCESS)
+		return result;
+	
+	VkCommandPoolCreateInfo transferpool_info = {};
+	transferpool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	transferpool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	transferpool_info.queueFamilyIndex = vk->queues.ndx_transfer_family;
+	
+	result = vkCreateCommandPool(vk->logical_device, &transferpool_info, NULL, &vk->commandpool_transfer);
+	wsVulkanPrint("transfer command pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 
@@ -497,7 +513,11 @@ VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 	buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	buffer_info.size = wsMeshGetCurrentBufferSize();
 	buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-	buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	if(vk->queues.num_unique_queue_families > 1)
+		buffer_info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+	else buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	buffer_info.queueFamilyIndexCount = vk->queues.num_unique_queue_families;
+	buffer_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
 	
 	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, &vk->vertexbuffer);
 	wsVulkanPrint("vertex buffer creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
@@ -520,14 +540,11 @@ VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 		{ return result; }
 	vkBindBufferMemory(vk->logical_device, vk->vertexbuffer, vk->vertexbuffer_memory, 0);
 	
-	wsMeshPrintMeshData();
-	
 	void* buffer_data;
 	vkMapMemory(vk->logical_device, vk->vertexbuffer_memory, 0, buffer_info.size, 0, &buffer_data);
 		memcpy(buffer_data, wsMeshGetVerticesPtr(), (size_t)buffer_info.size);
 	vkUnmapMemory(vk->logical_device, vk->vertexbuffer_memory);
 	
-	// TODO: START AT THE "MEMORY ALLOCATION" SECTION RIGHT AFTER VKALLOCATEMEMORY(): https://vulkan-tutorial.com/en/Vertex_buffers/Vertex_buffer_creation
 	return result;
 }
 
@@ -904,12 +921,10 @@ VkResult wsVulkanCreateSwapChain() {
 	
 	
 	// Check if queue family indices are unique.
-	uint32_t queue_family_indices[] = {vk->queues.ndx_graphics_family, vk->queues.ndx_present_family};
-	
-	if(vk->queues.ndx_graphics_family != vk->queues.ndx_present_family) {
+	if(vk->queues.num_unique_queue_families > 1) {
 		create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-		create_info.queueFamilyIndexCount = 2;
-		create_info.pQueueFamilyIndices = queue_family_indices;
+		create_info.queueFamilyIndexCount = vk->queues.num_unique_queue_families;
+		create_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
 	
 	} else {
 		create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1063,33 +1078,27 @@ void wsVulkanQuerySwapChainSupport() {
 		vkGetPhysicalDeviceSurfacePresentModesKHR(vk->physical_device, vk->surface, &num_present_modes, vk->swapchain.present_modes);
 	}
 }
-VkResult wsVulkanCreateSurface() {
-	// Creates a surface bound to our GLFW window.
+VkResult wsVulkanCreateSurface()
+{	// Creates a surface bound to our GLFW window.
 	
 	VkResult result = glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
 	wsVulkanPrint("surface creation for window", vk->windowID, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
-VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char* const* validation_layers) {
-	// Creates a logical device to interface with the physical one.
+VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char* const* validation_layers)
+{	// Creates a logical device to interface with the physical one.
 	
 	// Get required queue family indices and store them in vk.
 	wsVulkanFindQueueFamilies(&vk->queues, &vk->physical_device, &vk->surface);
 	
-	// Figure out how many unique queue families we need to initialize.
-	uint8_t num_unique_queue_families;
-	if(vk->queues.ndx_graphics_family == vk->queues.ndx_present_family)
-		num_unique_queue_families = 1;
-	else num_unique_queue_families = 2;
-	
 	// Store queue family creation infos for later use in binding to logical device creation info.
-	uint32_t unique_queue_family_indices[2] = {vk->queues.ndx_graphics_family, vk->queues.ndx_present_family};
+	uint32_t num_unique_queue_families = vk->queues.num_unique_queue_families;
 	VkDeviceQueueCreateInfo* queue_create_infos = calloc(num_unique_queue_families, sizeof(VkDeviceQueueCreateInfo));
 	
 	// Specify creation info for queue families.
 	for(uint8_t i = 0; i < num_unique_queue_families; i++) {
 		queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queue_create_infos[i].queueFamilyIndex = unique_queue_family_indices[i];
+		queue_create_infos[i].queueFamilyIndex = vk->queues.unique_queue_family_indices[i];
 		queue_create_infos[i].queueCount = 1;
 		
 		// Specify a queue priority from 0.0f-1.0f.  Required regardless of number of queues; influences scheduling of command buffer execution.
@@ -1119,7 +1128,8 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	create_info.ppEnabledExtensionNames = device_extensions;
 	
 	// Device-specific validation layers are deprecated for modern API versions, but required for older versions.
-	if(debug) {
+	if(debug)
+	{
 		create_info.enabledLayerCount = (uint32_t)num_validation_layers;
 		create_info.ppEnabledLayerNames = validation_layers;
 	} else create_info.enabledLayerCount = 0;
@@ -1130,10 +1140,11 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	
 	// Assign queue handles from logical_device.
 	vkGetDeviceQueue(vk->logical_device, vk->queues.ndx_graphics_family, 0, &vk->queues.graphics_queue);
+	vkGetDeviceQueue(vk->logical_device, vk->queues.ndx_transfer_family, 0, &vk->queues.transfer_queue);
 	vkGetDeviceQueue(vk->logical_device, vk->queues.ndx_present_family, 0, &vk->queues.present_queue);
 	
 	printf("INFO: %i unique Vulkan queue families exist; indices are as specified:\n", num_unique_queue_families);
-	printf("\tGraphics: %i\n\tPresentation: %i\n", vk->queues.ndx_graphics_family, vk->queues.ndx_present_family);
+	printf("\tGraphics: %i\n\tTransfer: %i\n\tPresentation: %i\n", vk->queues.ndx_graphics_family, vk->queues.ndx_transfer_family, vk->queues.ndx_present_family);
 	
 	
 	// FREE MEMORY!!!
@@ -1144,18 +1155,50 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	return result;
 }
 
-bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices) {
-	// Checks if all queue families have been found.
+bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices)
+{	// Checks if all queue families have been found.
 	
 	if(!indices->has_graphics_family)
+		return false;
+	if(!indices->has_transfer_family)
 		return false;
 	if(!indices->has_present_family)
 		return false;
 	
 	return true;
 }
-void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface) {
+uint8_t wsVulkanCountUniqueQueueIndices()
+{
+	uint8_t num_queue_families = 0;
 	
+	if(vk->queues.ndx_graphics_family == vk->queues.ndx_present_family)
+		num_queue_families++;
+	else num_queue_families += 2;
+	
+	if(vk->queues.ndx_transfer_family != vk->queues.ndx_graphics_family)
+		num_queue_families++;
+	
+	vk->queues.num_unique_queue_families = num_queue_families;
+	return num_queue_families;
+}
+void wsVulkanPopulateUniqueQueueFamiliesArray()
+{	// Make sure we have a list of all unique queue families stored for future buffer use!
+	
+	vk->queues.unique_queue_family_indices = malloc(vk->queues.num_unique_queue_families * sizeof(uint32_t));
+	if(vk->queues.has_graphics_family)	// If we have a graphics family, we likely support presentation, and we ALWAYS implicitly support transfer.
+		vk->queues.unique_queue_family_indices[0] = vk->queues.ndx_graphics_family;
+	if(vk->queues.ndx_graphics_family != vk->queues.ndx_transfer_family)
+		vk->queues.unique_queue_family_indices[1] = vk->queues.ndx_transfer_family;
+	if(vk->queues.ndx_graphics_family != vk->queues.ndx_present_family)
+		vk->queues.unique_queue_family_indices[2] = vk->queues.ndx_present_family;
+	
+	/* printf("%i\n", wsVulkanGetUniqueQueueIndicesCount());
+	for(uint8_t i = 0; i < wsVulkanGetUniqueQueueIndicesCount(); i++)
+		{ printf("%i ", vk->queues.unique_queue_family_indices[i]); }
+	printf("\n"); */
+}
+uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface)
+{
 	// Get list of queue families available to us.
 	uint32_t num_queue_families = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &num_queue_families, NULL);
@@ -1166,31 +1209,52 @@ void wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDevice*
 	
 	// These will end up as true once a family is found.
 	indices->has_graphics_family = false;
+	indices->has_transfer_family = false;
 	indices->has_present_family = false;
 	
-	for(int32_t i = 0; i < num_queue_families; i++) {
-		
+	for(uint32_t i = 0; i < num_queue_families; i++)
+	{
 		// Current queue family to analyze.
 		VkQueueFamilyProperties queue_family = queue_families[i];
 		
 		// Check for graphics queue family support.
-		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+		{
 			indices->ndx_graphics_family = i;
 			indices->has_graphics_family = true;
+			
+		}
+		if((queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT) && (i != indices->ndx_graphics_family))
+		{
+			indices->ndx_transfer_family = i;
+			indices->has_transfer_family = true;
 		}
 		
 		// Check for presentation queue family support.
 		VkBool32 has_present_support = false;
 		vkGetPhysicalDeviceSurfaceSupportKHR(*physical_device, i, *surface, &has_present_support);
-		if(has_present_support) {
+		if(has_present_support)
+		{
 			indices->ndx_present_family = i;
 			indices->has_present_family = true;
 		}
 		
 		// If we have found all queue families, we are done searching!
 		if(wsVulkanHasFoundAllQueueFamilies(indices))
-			return;
+		{
+			wsVulkanCountUniqueQueueIndices();
+			wsVulkanPopulateUniqueQueueFamiliesArray();
+			return num_queue_families;
+		}
 	}
+	
+	indices->ndx_transfer_family = indices->ndx_graphics_family;
+	indices->has_transfer_family = true;
+	
+	wsVulkanCountUniqueQueueIndices();
+	wsVulkanPopulateUniqueQueueFamiliesArray();
+	
+	return num_queue_families;
 }
 
 bool wsVulkanPickPhysicalDevice() {
@@ -1245,7 +1309,7 @@ bool wsVulkanPickPhysicalDevice() {
 	// Don't free GPU list so that we can allow user to swap GPUs in settings later.
 }
 int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device) {
-	enum GPU_INCOMPATIBILITY_CODES {NO_GEOMETRY_SHADER = INT_MIN, NO_GRAPHICS_FAMILY, NO_PRESENTATION_FAMILY, NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT};
+	enum GPU_INCOMPATIBILITY_CODES {NO_GEOMETRY_SHADER = -100, NO_GRAPHICS_FAMILY, NO_TRANSFER_FAMILY, NO_PRESENTATION_FAMILY, NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT};
 	int32_t score = 0;
 	
 	
@@ -1265,9 +1329,13 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device) {
 	
 	// Program cannot function without certain queue families.
 	wsVulkanQueueFamilies indices;
-	wsVulkanFindQueueFamilies(&indices, physical_device, &vk->surface);
+	uint32_t num_queue_families = wsVulkanFindQueueFamilies(&indices, physical_device, &vk->surface);
+	printf("Found %i queue families on your device!\n", num_queue_families);
+	
 	if(!indices.has_graphics_family)
 		return NO_GRAPHICS_FAMILY;
+	if(!indices.has_transfer_family)
+		return NO_TRANSFER_FAMILY;
 	if(!indices.has_present_family)
 		return NO_PRESENTATION_FAMILY;
 	

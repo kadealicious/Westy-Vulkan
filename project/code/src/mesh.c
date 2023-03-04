@@ -19,6 +19,8 @@ void wsMeshConsolidateBuffer();
 void wsMeshSetBindingDescription(uint8_t meshID);
 void wsMeshSetAttributeDescriptions(uint8_t meshID);
 
+void wsMeshPrintMeshData(uint8_t meshID);
+
 
 void wsMeshInit(wsMesh* mesh_data) {
     
@@ -87,6 +89,8 @@ uint8_t wsMeshCreate()
     md->isloaded[meshID] = WS_MESH_LOADED;
 	md->num_active_meshes++;
 	
+	wsMeshPrintMeshData(meshID);
+	
     printf("INFO: Mesh w/ ID %i initialized!\n", meshID);
 	wsMeshConsolidateBuffer();
 	return meshID;
@@ -134,14 +138,14 @@ void wsMeshMoveData(uint8_t destID, uint8_t srcID)
 	md->isloaded[srcID] = WS_MESH_UNLOADED;
 }
 
-void wsMeshPrintMeshData()
+void wsMeshPrintMeshData(uint8_t meshID)
 {
-	printf("INFO: Printing mesh %i's data: \n", 0);
-	for(uint32_t i = 0; i < md->num_vertices[0]; i++)
+	printf("INFO: Printing mesh %i's data: \n", meshID);
+	for(uint32_t i = 0; i < md->num_vertices[meshID]; i++)
 	{
-		printf("\tVertex %i - Position: %f %f, Color: %f %f %f\n", i, md->vertices[0][i].position[0], 
-			md->vertices[0][i].position[1], md->vertices[0][i].position[2], md->vertices[0][i].color[0], 
-			md->vertices[0][i].color[1]);
+		printf("\tVertex %i - Position: %f %f, Color: %f %f %f\n", i, md->vertices[meshID][i].position[0], 
+			md->vertices[meshID][i].position[1], md->vertices[meshID][i].position[2], md->vertices[meshID][i].color[0], 
+			md->vertices[meshID][i].color[1]);
 	}
 }
 wsVertex* wsMeshGetVerticesPtr()

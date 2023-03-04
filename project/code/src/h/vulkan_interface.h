@@ -15,15 +15,26 @@
 // All the data Vulkan could possibly want!
 typedef struct wsVulkanQueueFamilies
 {
+	// Used for buffer creation and stuff.
+	uint32_t* unique_queue_family_indices;
+	uint8_t num_unique_queue_families;
+	
 	// Used for drawing graphics!
-	bool has_graphics_family;// Have we found a graphical queue family?
-	uint32_t ndx_graphics_family;// Index of graphical queue family.
-	VkQueue graphics_queue;	// Graphics queue family.
+	bool has_graphics_family;		// Have we found a graphical queue family?
+	uint32_t ndx_graphics_family;	// Index of graphical queue family.
+	VkQueue graphics_queue;			// Graphics queue family.
+	
+	/* Used for transferring data from the CPU to the GPU; very useful for vertex buffers!
+		This family is implicitly supported if the GPU can queue graphics/compute operations, 
+		however explicitly specifying it may have some performance benefit.  Who knows! */
+	bool has_transfer_family;		// Have we found a transfer-capable queue family?
+	uint32_t ndx_transfer_family;	// Index of transfer queue family.
+	VkQueue transfer_queue;			// Transfer queue family.
 	
 	// Used for presenting surfaces to the window.
-	bool has_present_family;// Have we found a presentation queue family?
+	bool has_present_family;	// Have we found a presentation queue family?
 	uint32_t ndx_present_family;// Index of presentation queue family.
-	VkQueue present_queue;	// Presentation queue family.
+	VkQueue present_queue;		// Presentation queue family.
 	
 } wsVulkanQueueFamilies;
 
@@ -58,9 +69,10 @@ typedef struct wsVulkan
 	VkDevice			logical_device;		// Primary logical device used to interface with the physical device.
 	VkDebugUtilsMessengerEXT debug_messenger;	// Main debug messenger.
 	
-	wsVulkanQueueFamilies queues;	// Contains all queue data.
-	VkCommandPool commandpool;		// Pool for sending queued and sending to Vulkan for execution.
-	VkCommandBuffer* commandbuffers;// Buffer(s) used for recording commands to for sending to command pool.
+	wsVulkanQueueFamilies queues;		// Contains all queue data.
+	VkCommandPool commandpool_graphics;	// Pool for sending graphics/presentation commands to Vulkan for execution.
+	VkCommandPool commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
+	VkCommandBuffer* commandbuffers;	// Buffer(s) used for recording commands to for sending to command pool.
 	
 	VkBuffer vertexbuffer;				// TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.
 	VkDeviceMemory vertexbuffer_memory;	// Contains memory used by vertex buffer to store all vertices/indices/etc.

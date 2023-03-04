@@ -34,7 +34,7 @@ void wsMeshStop();
 
 uint32_t wsMeshGetCurrentBufferSize();
 wsVertex* wsMeshGetVerticesPtr();
-void wsMeshPrintMeshData();
+void wsMeshPrintMeshData(uint8_t meshID);
 
 uint8_t wsMeshGetNumAttributeDescriptions(uint8_t meshID);
 VkVertexInputAttributeDescription* wsMeshGetAttributeDescriptions(uint8_t meshID);
