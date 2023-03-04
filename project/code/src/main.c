@@ -56,6 +56,10 @@ int main(int argc, char* argv[]) {
 		
 		
 		// Logic step.
+		// Not workie; make crashy :(
+		/*md.vertices[0][0].color[0] = 1;
+		md.vertices[0][0].color[1] = 1;
+		md.vertices[0][0].color[2] = 1;*/
 		
 		
 		// Post-logic step.

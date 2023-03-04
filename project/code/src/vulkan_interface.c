@@ -58,6 +58,8 @@ VkResult wsVulkanCreateCommandPool();		// Create command pool for queueing comma
 VkResult wsVulkanCreateCommandBuffers();	// Creates command buffer for holding commands.
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
 
+VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size);
+VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory);
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 
 // Queue family management.
@@ -86,8 +88,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 
 // Print statements for things that return a VkResult.
 enum WS_ID_STATES { WS_VULKAN_NULL = INT32_MAX };
-void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result) {
-	
+void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result)
+{
 	// If we have neither an ID nor fraction.
 	if(ID == WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
@@ -113,8 +115,8 @@ void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denom
 		else printf("INFO: Vulkan %s %i/%i w/ ID %i success!\n", str, numerator, denominator, ID);
 	}
 }
-void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result) {
-	
+void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result)
+{
 	// If we have neither an ID nor fraction.
 	if(ID == WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
 		if(result != VK_SUCCESS)
@@ -506,44 +508,106 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 	printf("ERROR: Vulkan memory type not found!\n");
 	return WS_VULKAN_NULL;
 }
-VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
+VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size)
+{
+	VkCommandBufferAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	alloc_info.commandPool = vk->commandpool_transfer;	// I bet this will crash, because I forget if I initialized this command pool.  I guess we'll see, won't we!
+	alloc_info.commandBufferCount = 1;
+	VkCommandBuffer commandbuffer;
+	vkAllocateCommandBuffers(vk->logical_device, &alloc_info, &commandbuffer);
+	
+	
+	VkCommandBufferBeginInfo begin_info = {};
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vkBeginCommandBuffer(commandbuffer, &begin_info);
+	
+		VkBufferCopy copyregion = {};
+		copyregion.srcOffset = 0;	// Optional.
+		copyregion.dstOffset = 0;	// (Also) optional.
+		copyregion.size = size;
+		vkCmdCopyBuffer(commandbuffer, buffer_src, buffer_dst, 1, &copyregion);
+	
+	vkEndCommandBuffer(commandbuffer);
+	
+	
+	VkSubmitInfo submit_info = {};
+	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount = 1;
+	submit_info.pCommandBuffers = &commandbuffer;
+	VkResult result = vkQueueSubmit(vk->queues.transfer_queue, 1, &submit_info, VK_NULL_HANDLE);
+	
+	/* TODO: Make this use fences instead of waiting for the queue to idle; this 
+		would (allegedly) allow for multiple transfer commands to execute in parallel. */
+	vkQueueWaitIdle(vk->queues.transfer_queue);
+	
+	vkFreeCommandBuffers(vk->logical_device, vk->commandpool_transfer, 1, &commandbuffer);
+	
+	return result;
+}
+VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory)	// Helper function for wsVulkanCreateVertexBuffer().
 {
 	// Create vertex buffer.
 	VkBufferCreateInfo buffer_info = {};
 	buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	buffer_info.size = wsMeshGetCurrentBufferSize();
-	buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	buffer_info.size = size;
+	buffer_info.usage = usage;
 	if(vk->queues.num_unique_queue_families > 1)
 		buffer_info.sharingMode = VK_SHARING_MODE_CONCURRENT;
 	else buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	buffer_info.queueFamilyIndexCount = vk->queues.num_unique_queue_families;
 	buffer_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
 	
-	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, &vk->vertexbuffer);
+	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, buffer);
 	wsVulkanPrint("vertex buffer creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	
 	// Specify vertex buffer memory requirements.
 	VkMemoryRequirements memory_requirements;
-	vkGetBufferMemoryRequirements(vk->logical_device, vk->vertexbuffer, &memory_requirements);
+	vkGetBufferMemoryRequirements(vk->logical_device, *buffer, &memory_requirements);
 	
 	VkMemoryAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	alloc_info.allocationSize = memory_requirements.size;
-	VkMemoryPropertyFlags memory_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+	VkMemoryPropertyFlags memory_properties = properties;
 	alloc_info.memoryTypeIndex = wsVulkanFindMemoryType(memory_requirements.memoryTypeBits, memory_properties);
 	
 	// Allocate and bind buffer memory to appropriate vertex buffer.
-	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, &vk->vertexbuffer_memory);
+	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, buffer_memory);
 	wsVulkanPrint("vertex buffer memory allocation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	if(result != VK_SUCCESS)
 		{ return result; }
-	vkBindBufferMemory(vk->logical_device, vk->vertexbuffer, vk->vertexbuffer_memory, 0);
+	
+	result = vkBindBufferMemory(vk->logical_device, *buffer, *buffer_memory, 0);
+	return result;
+}
+VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
+{
+	uint32_t buffer_size = wsMeshGetCurrentBufferSize();
+	
+	// Create staging buffer for CPU (host) visibility's sake.
+	VkBuffer stagingbuffer;
+	VkDeviceMemory stagingbuffer_memory;
+	VkResult result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+		&stagingbuffer, &stagingbuffer_memory);
 	
 	void* buffer_data;
-	vkMapMemory(vk->logical_device, vk->vertexbuffer_memory, 0, buffer_info.size, 0, &buffer_data);
-		memcpy(buffer_data, wsMeshGetVerticesPtr(), (size_t)buffer_info.size);
-	vkUnmapMemory(vk->logical_device, vk->vertexbuffer_memory);
+	vkMapMemory(vk->logical_device, stagingbuffer_memory, 0, buffer_size, 0, &buffer_data);
+		memcpy(buffer_data, wsMeshGetVerticesPtr(), (size_t)buffer_size);
+	vkUnmapMemory(vk->logical_device, stagingbuffer_memory);
+	
+	// Create actual buffer for GPU streaming.
+	result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->vertexbuffer, &vk->vertexbuffer_memory);
+	
+	// Copy the staging buffer's data into the vertex buffer!
+	result = wsVulkanCopyBuffer(stagingbuffer, vk->vertexbuffer, buffer_size);
+	
+	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
+	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);
 	
 	return result;
 }
