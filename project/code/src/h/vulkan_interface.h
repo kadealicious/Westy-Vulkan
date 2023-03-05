@@ -76,7 +76,9 @@ typedef struct wsVulkan
 	
 	VkBuffer vertexbuffer;				// TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.
 	VkDeviceMemory vertexbuffer_memory;	// Contains memory used by vertex buffer to store all vertices/indices/etc.
-	wsMesh vertexbuffer_mesh;			// Contains all raw vertex/index data.
+	VkBuffer indexbuffer;
+	VkDeviceMemory indexbuffer_memory;
+	wsMesh meshbuffer;					// Contains all raw vertex/index data.
 	
 	VkSemaphore* img_available_semaphores;	// Used to check if GPU has any image(s) available for rendering.
 	VkSemaphore* render_finish_semaphores;	// Used to check if GPU has finished rendering available image(s).

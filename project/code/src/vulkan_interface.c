@@ -61,6 +61,7 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);
 VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size);
 VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory);
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
+VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 
 // Queue family management.
 uint8_t wsVulkanCountUniqueQueueIndices();
@@ -149,8 +150,8 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	vk = vulkan_data;								// Point to program data!!!
 	vk->swapchain.framebuffer_hasresized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
 	
-	wsMeshInit(&vk->vertexbuffer_mesh);	// Allow models to exist for Vulkan.
-	mesh_data = &vk->vertexbuffer_mesh;	// Pass this back to main.c for visibility.
+	wsMeshInit(&vk->meshbuffer);	// Allow models to exist for Vulkan.
+	mesh_data = &vk->meshbuffer;	// Pass this back to main.c for visibility.
 	
 	vk->windowID = windowID;																		// Specify which window we will be rendering to.
 	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
@@ -213,7 +214,8 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
-	wsVulkanCreateVertexBuffer(NULL, 0);		// Creates vertex buffers which hold our vertex input data.
+	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
+	wsVulkanCreateIndexBuffer(NULL, 0);
 	wsVulkanCreateCommandBuffers();		// Creates command buffer(s), used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects();		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
 	
@@ -354,6 +356,8 @@ void wsVulkanStop()
 	wsVulkanDestroySwapChain();
 	vkDestroyBuffer(vk->logical_device, vk->vertexbuffer, NULL);		printf("INFO: Vulkan vertex buffer destroyed!\n");
 	vkFreeMemory(vk->logical_device, vk->vertexbuffer_memory, NULL);	printf("INFO: Vulkan vertex buffer memory freed!\n");
+	vkDestroyBuffer(vk->logical_device, vk->indexbuffer, NULL);		printf("INFO: Vulkan index buffer destroyed!\n");
+	vkFreeMemory(vk->logical_device, vk->indexbuffer_memory, NULL);	printf("INFO: Vulkan index buffer memory freed!\n");
 	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);	printf("INFO: Vulkan render pass destroyed!\n");
 	wsShaderUnloadAll(&vk->shader);
 	vkDestroyDevice(vk->logical_device, NULL);				printf("INFO: Vulkan logical device destroyed!\n");
@@ -439,7 +443,8 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	VkBuffer vertexbuffers[1] = {vk->vertexbuffer};
 	VkDeviceSize offsets[1] = {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
-	vkCmdDraw(*commandbuffer, (uint32_t)vk->vertexbuffer_mesh.num_vertices[0], 1, 0, 0);
+	vkCmdBindIndexBuffer(*commandbuffer, vk->indexbuffer, 0, VK_INDEX_TYPE_UINT16);
+	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->meshbuffer.num_indices[0], 1, 0, 0, 0);
 	
 	
 	// End render pass.
@@ -585,7 +590,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 }
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 {
-	uint32_t buffer_size = wsMeshGetCurrentBufferSize();
+	uint32_t buffer_size = wsMeshGetCurrentVertexBufferSize();
 	
 	// Create staging buffer for CPU (host) visibility's sake.
 	VkBuffer stagingbuffer;
@@ -605,6 +610,34 @@ VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 	
 	// Copy the staging buffer's data into the vertex buffer!
 	result = wsVulkanCopyBuffer(stagingbuffer, vk->vertexbuffer, buffer_size);
+	
+	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
+	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);
+	
+	return result;
+}
+VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
+{
+	uint32_t buffer_size = wsMeshGetCurrentIndexBufferSize();
+	
+	// Create staging buffer for CPU (host) visibility's sake.
+	VkBuffer stagingbuffer;
+	VkDeviceMemory stagingbuffer_memory;
+	VkResult result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+		&stagingbuffer, &stagingbuffer_memory);
+	
+	void* buffer_data;
+	vkMapMemory(vk->logical_device, stagingbuffer_memory, 0, buffer_size, 0, &buffer_data);
+		memcpy(buffer_data, wsMeshGetIndicesPtr(), (size_t)buffer_size);
+	vkUnmapMemory(vk->logical_device, stagingbuffer_memory);
+	
+	// Create actual buffer for GPU streaming.
+	result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->indexbuffer, &vk->indexbuffer_memory);
+	
+	// Copy the staging buffer's data into the vertex buffer!
+	result = wsVulkanCopyBuffer(stagingbuffer, vk->indexbuffer, buffer_size);
 	
 	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
 	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);

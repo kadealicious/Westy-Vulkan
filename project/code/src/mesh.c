@@ -42,8 +42,8 @@ void wsMeshStop()
 uint8_t wsMeshCreate()
 {
 	// Find a vacant meshID to use!
-    uint8_t meshID = (WS_MESH_MAX_MESHS+1);
-	for(uint8_t i = 0; i < WS_MESH_MAX_MESHS; i++)
+    uint8_t meshID = (WS_MESH_MAX_MESHES+1);
+	for(uint8_t i = 0; i < WS_MESH_MAX_MESHES; i++)
 	{
 		if(md->isloaded[i] == WS_MESH_UNLOADED)
 		{
@@ -51,33 +51,52 @@ uint8_t wsMeshCreate()
 			break;
 		}
 	}
-    if(meshID == (WS_MESH_MAX_MESHS+1))
+    if(meshID == (WS_MESH_MAX_MESHES+1))
 	{
 		printf("ERROR: No vacant mesh ID could be found; mesh not loaded!\n");
 		return 0;
 	}
 	
-    // Load vertices.  Jesus Christ.
-    md->num_vertices[meshID] = 3;
-    md->vertices[meshID] = malloc(md->num_vertices[meshID] * sizeof(wsVertex));
 	
-	md->vertices[meshID][0].position[0] = 0.0f;
+    // Load vertices.
+    md->num_vertices[meshID] = 4;
+    md->vertices[meshID] = (wsVertex*)malloc(md->num_vertices[meshID] * sizeof(wsVertex));
+	
+	md->vertices[meshID][0].position[0] = -0.5f;
 	md->vertices[meshID][0].position[1] = -0.5f;
 	md->vertices[meshID][0].color[0] = 1.0f;
-	md->vertices[meshID][0].color[1] = 1.0f;
-	md->vertices[meshID][0].color[2] = 1.0f;
+	md->vertices[meshID][0].color[1] = 0.0f;
+	md->vertices[meshID][0].color[2] = 0.0f;
     
 	md->vertices[meshID][1].position[0] = 0.5f;
-	md->vertices[meshID][1].position[1] = 0.5f;
+	md->vertices[meshID][1].position[1] = -0.5f;
 	md->vertices[meshID][1].color[0] = 0.0f;
 	md->vertices[meshID][1].color[1] = 1.0f;
 	md->vertices[meshID][1].color[2] = 0.0f;
 	
-	md->vertices[meshID][2].position[0] = -0.5f;
+	md->vertices[meshID][2].position[0] = 0.5f;
 	md->vertices[meshID][2].position[1] = 0.5f;
 	md->vertices[meshID][2].color[0] = 0.0f;
 	md->vertices[meshID][2].color[1] = 0.0f;
 	md->vertices[meshID][2].color[2] = 1.0f;
+	
+	md->vertices[meshID][3].position[0] = -0.5f;
+	md->vertices[meshID][3].position[1] = 0.5f;
+	md->vertices[meshID][3].color[0] = 1.0f;
+	md->vertices[meshID][3].color[1] = 0.0f;
+	md->vertices[meshID][3].color[2] = 1.0f;
+	
+	
+	// Load indices.  Jesus Christ.
+	md->num_indices[meshID] = 6;
+	md->indices[meshID] = (uint16_t*)malloc(md->num_indices[meshID] * sizeof(uint16_t));
+	md->indices[meshID][0] = 0;
+	md->indices[meshID][1] = 1;
+	md->indices[meshID][2] = 2;
+	md->indices[meshID][3] = 2;
+	md->indices[meshID][4] = 3;
+	md->indices[meshID][5] = 0;
+	
 	
     // Configure vertex binding descriptions, then the more fundamental attribute descriptions.
     uint8_t num_attributes = WS_MESH_MAX_ATTRIBUTE_DESCRIPTIONS;
@@ -150,6 +169,8 @@ void wsMeshPrintMeshData(uint8_t meshID)
 }
 wsVertex* wsMeshGetVerticesPtr()
 	{ return md->vertices[0]; }
+uint16_t* wsMeshGetIndicesPtr()
+	{ return md->indices[0]; }
 
 void wsMeshConsolidateBuffer()
 {
@@ -157,7 +178,7 @@ void wsMeshConsolidateBuffer()
 	uint8_t num_meshes = 0;
 	
 	uint8_t j = 0;
-	for(uint8_t i = (WS_MESH_MAX_MESHS-1); i > j; i--)
+	for(uint8_t i = (WS_MESH_MAX_MESHES-1); i > j; i--)
 	{	// If we haven't loaded any meshes at index i, continue.
 		if(md->isloaded[i] == WS_MESH_UNLOADED)
 			{ continue; }
@@ -177,7 +198,7 @@ void wsMeshConsolidateBuffer()
 	
 	printf("INFO: %i meshes consolidated successfully!\n", num_consolidated);
 }
-uint32_t wsMeshGetCurrentBufferSize()
+uint32_t wsMeshGetCurrentVertexBufferSize()
 {
 	uint32_t buffer_size = 0;
 	
@@ -185,6 +206,19 @@ uint32_t wsMeshGetCurrentBufferSize()
 	while(md->isloaded[i] == WS_MESH_LOADED && i < md->num_vertices[i])
 	{
 		buffer_size += md->num_vertices[i] * sizeof(wsVertex);
+		i++;
+	}
+	
+	return buffer_size;
+}
+uint32_t wsMeshGetCurrentIndexBufferSize()
+{
+	uint32_t buffer_size = 0;
+	
+	uint8_t i = 0;
+	while(md->isloaded[i] == WS_MESH_LOADED && i < md->num_indices[i])
+	{
+		buffer_size += md->num_indices[i] * sizeof(uint16_t);
 		i++;
 	}
 	
