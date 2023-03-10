@@ -3,14 +3,31 @@
 
 
 #include<stdbool.h>
+#include<time.h>
+
 #include <vulkan/vulkan.h>
+
 #include"shader.h"
 #include"mesh.h"
 
 
 #define WS_VULKAN_MAX_FRAMES_IN_FLIGHT 2
-#define WS_VULKAN_MAX_VERTEX_BUFFERS 4;
+#define WS_VULKAN_MAX_VERTEX_BUFFERS 4
+#define WS_VULKAN_MAX_DESCRIPTOR_BUFFERS 10
 
+
+typedef struct wsVulkanUniformBufferObject
+{
+	// TODO: THIS
+	/*mat4 model[WS_VULKAN_MAX_DESCRIPTOR_BUFFERS];
+	mat4 view[WS_VULKAN_MAX_DESCRIPTOR_BUFFERS];
+	mat4 proj[WS_VULKAN_MAX_DESCRIPTOR_BUFFERS];*/
+	
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+	
+} wsVulkanUBO;
 
 // All the data Vulkan could possibly want!
 typedef struct wsVulkanQueueFamilies
@@ -74,11 +91,19 @@ typedef struct wsVulkan
 	VkCommandPool commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
 	VkCommandBuffer* commandbuffers;	// Buffer(s) used for recording commands to for sending to command pool.
 	
+	wsMesh meshbuffer;					// Contains all raw vertex/index data.
 	VkBuffer vertexbuffer;				// TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.
 	VkDeviceMemory vertexbuffer_memory;	// Contains memory used by vertex buffer to store all vertices/indices/etc.
 	VkBuffer indexbuffer;
 	VkDeviceMemory indexbuffer_memory;
-	wsMesh meshbuffer;					// Contains all raw vertex/index data.
+	
+	VkBuffer* uniformbuffers;
+	VkDeviceMemory* uniformbuffers_memory;
+	void** uniformbuffers_mapped;
+	
+	VkDescriptorPool descriptorpool;
+	VkDescriptorSet* descriptorsets;
+	VkDescriptorSetLayout descriptorset_layout;	// Contains data about descriptor set's layout.
 	
 	VkSemaphore* img_available_semaphores;	// Used to check if GPU has any image(s) available for rendering.
 	VkSemaphore* render_finish_semaphores;	// Used to check if GPU has finished rendering available image(s).
@@ -99,7 +124,7 @@ typedef struct wsVulkan
 
 // Vulkan external interfacing functions.
 void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
-VkResult wsVulkanDrawFrame();
+VkResult wsVulkanDrawFrame(time_t delta_time);
 void wsVulkanStop();
 
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Used for interfacing in window.c.

@@ -4,8 +4,10 @@
 #include<string.h>
 #include<limits.h>
 
-#include <vulkan/vulkan.h>
+#define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
+#define GLM_FORCE_RADIANS
+#include<CGLM/cglm.h>
 
 #include"h/vulkan_interface.h"
 #include"h/window.h"
@@ -22,7 +24,7 @@ void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
 // Main external calls to Vulkan.
 void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
-VkResult wsVulkanDrawFrame();
+VkResult wsVulkanDrawFrame(time_t delta_time);
 void wsVulkanStop();
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Passed to GLFW for the window resize event.
 
@@ -50,6 +52,7 @@ uint32_t wsVulkanCreateImageViews();		// Creates image views viewing swap chain 
 VkResult wsVulkanCreateFrameBuffers();		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
 VkResult wsVulkanCreateSurface();			// Creates a surface for drawing to the screen; stores inside of struct vk.
 VkResult wsVulkanCreateRenderPass();		// Creates a render pass; stores inside of struct vk.
+VkResult wsVulkanCreateDescriptorSetLayout();
 VkResult wsVulkanCreateGraphicsPipeline();	// Creates a graphics pipeline; stores inside of struct vk.
 VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
@@ -62,6 +65,10 @@ VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSi
 VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory);
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
+VkResult wsVulkanCreateUniformBuffers();
+void wsVulkanUpdateUniformBuffer(uint32_t current_frame, time_t delta_time);
+VkResult wsVulkanCreateDescriptorPool();
+VkResult wsVulkanCreateDescriptorSets();
 
 // Queue family management.
 uint8_t wsVulkanCountUniqueQueueIndices();
@@ -146,7 +153,7 @@ uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num
 void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 {	// Call after wsWindowInit().
 	
-	// Start with stuff *unlikely* to crash the program... right?
+	// Non-Vulkan-specific initialization stuff.
 	vk = vulkan_data;								// Point to program data!!!
 	vk->swapchain.framebuffer_hasresized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
 	
@@ -210,19 +217,25 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	wsVulkanCreateSwapChain();		// Swap chain is in charge of swapping images to the screen when they are needed.
 	wsVulkanCreateImageViews();		// Image views describe how we will use, write-to, and read each image.
 	wsVulkanCreateRenderPass();
+	wsVulkanCreateDescriptorSetLayout();
 	wsVulkanCreateGraphicsPipeline();	// Graphics pipeline combines all created objects and information into one abstraction.
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
+	
 	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
 	wsVulkanCreateIndexBuffer(NULL, 0);
+	wsVulkanCreateUniformBuffers();
+	wsVulkanCreateDescriptorPool();
+	wsVulkanCreateDescriptorSets();
+	
 	wsVulkanCreateCommandBuffers();		// Creates command buffer(s), used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects();		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
 	
 	
 	printf("---END VULKAN INITIALIZATION---\n");
 }
-VkResult wsVulkanDrawFrame()
+VkResult wsVulkanDrawFrame(time_t delta_time)
 {
 	// Wait for any important GPU tasks to finish up first.
 	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame], VK_TRUE, UINT64_MAX);
@@ -230,9 +243,8 @@ VkResult wsVulkanDrawFrame()
 	// Acquire next swapchain image.  If out of date or suboptimal, recreate it!
 	uint32_t img_ndx;
 	VkResult result = vkAcquireNextImageKHR(vk->logical_device, vk->swapchain.sc, UINT64_MAX, vk->img_available_semaphores[vk->swapchain.current_frame], VK_NULL_HANDLE, &img_ndx);
-	
-	switch(result) {
-		
+	switch(result)
+	{
 		case VK_SUCCESS: 
 		case VK_SUBOPTIMAL_KHR: 
 			break;
@@ -246,6 +258,9 @@ VkResult wsVulkanDrawFrame()
 			printf("ERROR: Vulkan swap chain failed to acquire next image with result code %i!", result);
 			return result;
 	}
+	
+	// This may be the incorrect argument; try "image_ndx"?
+	wsVulkanUpdateUniformBuffer(vk->swapchain.current_frame, delta_time);
 	
 	// Only reset fences if we know we will be submitting work to Vulkan with it.
 	vkResetFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame]);
@@ -349,15 +364,37 @@ void wsVulkanStop()
 	// Free memory associated with queue families.
 	free(vk->queues.unique_queue_family_indices);
 	
+	// Command queueing and pooling.
 	vkDestroyCommandPool(vk->logical_device, vk->commandpool_graphics, NULL);	printf("INFO: Vulkan graphics/presentation command pool destroyed!\n");
 	vkDestroyCommandPool(vk->logical_device, vk->commandpool_transfer, NULL);	printf("INFO: Vulkan transfer command pool destroyed!\n");
+	
 	vkDestroyPipeline(vk->logical_device, vk->pipeline, NULL);				printf("INFO: Vulkan graphics pipeline destroyed!\n");
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);	printf("INFO: Vulkan pipeline layout destroyed!\n");
-	wsVulkanDestroySwapChain();
+	wsVulkanDestroySwapChain();												// Already prints info messages!
+	
+	// Free UBO, vertex, & index buffer memory.
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		vkDestroyBuffer(vk->logical_device, vk->uniformbuffers[i], NULL);
+		vkFreeMemory(vk->logical_device, vk->uniformbuffers_memory[i], NULL);
+	}
+	printf("INFO: All Vulkan UBOs destroyed!\n");
+	// These next three lines may be a double free.  I'll install Valgrind later!
+	/*free(vk->uniformbuffers);			printf("INFO: All Vulkan UBOs destroyed!\n");
+	free(vk->uniformbuffers_memory);	printf("INFO: All Vulkan UBOs' memory destroyed!\n");
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ free(vk->uniformbuffers_mapped[i]); }
+	free(vk->uniformbuffers_mapped);	printf("INFO: All Vulkan UBOs' mapped memory destroyed!\n");*/
+	
+	vkDestroyDescriptorPool(vk->logical_device, vk->descriptorpool, NULL);				printf("INFO: Vulkan descriptor pool destroyed!\n");
+	vkDestroyDescriptorSetLayout(vk->logical_device, vk->descriptorset_layout, NULL);	printf("INFO: Vulkan descriptor set layout destroyed!\n");
+	free(vk->descriptorsets);
+	
 	vkDestroyBuffer(vk->logical_device, vk->vertexbuffer, NULL);		printf("INFO: Vulkan vertex buffer destroyed!\n");
 	vkFreeMemory(vk->logical_device, vk->vertexbuffer_memory, NULL);	printf("INFO: Vulkan vertex buffer memory freed!\n");
 	vkDestroyBuffer(vk->logical_device, vk->indexbuffer, NULL);		printf("INFO: Vulkan index buffer destroyed!\n");
 	vkFreeMemory(vk->logical_device, vk->indexbuffer_memory, NULL);	printf("INFO: Vulkan index buffer memory freed!\n");
+	
 	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);	printf("INFO: Vulkan render pass destroyed!\n");
 	wsShaderUnloadAll(&vk->shader);
 	vkDestroyDevice(vk->logical_device, NULL);				printf("INFO: Vulkan logical device destroyed!\n");
@@ -408,21 +445,17 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderpass_info.renderPass = vk->renderpass;
 	renderpass_info.framebuffer = vk->swapchain.framebuffers[img_ndx];
-	
 	renderpass_info.renderArea.offset.x = 0;
 	renderpass_info.renderArea.offset.y = 0;
 	renderpass_info.renderArea.extent = vk->swapchain.extent;
-	
 	VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
 	renderpass_info.clearValueCount = 1;
 	renderpass_info.pClearValues = &clear_color;
-	
 	vkCmdBeginRenderPass(*commandbuffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 	
 	// Bind graphics pipeline, then specify viewport & scissor states for this pipeline.
 	vkCmdBindPipeline(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
-	
 	VkViewport viewport = {};
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
@@ -431,19 +464,19 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 	vkCmdSetViewport(*commandbuffer, 0, 1, &viewport);
-	
 	VkRect2D scissor = {};
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
 	scissor.extent = vk->swapchain.extent;
 	vkCmdSetScissor(*commandbuffer, 0, 1, &scissor);
 	
-	
-	// !!!Draw triangle!!!
+	// Bind triangle information & draw!
 	VkBuffer vertexbuffers[1] = {vk->vertexbuffer};
 	VkDeviceSize offsets[1] = {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
 	vkCmdBindIndexBuffer(*commandbuffer, vk->indexbuffer, 0, VK_INDEX_TYPE_UINT16);
+	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
+		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
 	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->meshbuffer.num_indices[0], 1, 0, 0, 0);
 	
 	
@@ -566,7 +599,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	buffer_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
 	
 	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, buffer);
-	wsVulkanPrint("vertex buffer creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("buffer creation", (int32_t)buffer, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	
 	// Specify vertex buffer memory requirements.
@@ -581,7 +614,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	
 	// Allocate and bind buffer memory to appropriate vertex buffer.
 	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, buffer_memory);
-	wsVulkanPrint("vertex buffer memory allocation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("buffer memory allocation", (int32_t)buffer_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	if(result != VK_SUCCESS)
 		{ return result; }
 	
@@ -644,12 +677,127 @@ VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 	
 	return result;
 }
+VkResult wsVulkanCreateUniformBuffers()
+{
+	VkDeviceSize buffer_size = sizeof(wsVulkanUBO);
+	vk->uniformbuffers			= (VkBuffer*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkBuffer));
+	vk->uniformbuffers_memory	= (VkDeviceMemory*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkDeviceMemory));
+	vk->uniformbuffers_mapped	= (void**)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(void*));
+	
+	
+	VkResult result;
+	
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vk->uniformbuffers[i], &vk->uniformbuffers_memory[i]);
+		
+		// We may crash when we dereference a void* here.
+		// vk->uniformbuffers_mapped[i] = (void*)malloc(buffer_size);
+		result = vkMapMemory(vk->logical_device, vk->uniformbuffers_memory[i], 0, buffer_size, 0, &vk->uniformbuffers_mapped[i]);
+		
+		wsVulkanPrintQuiet("uniform buffer creation", WS_VULKAN_NULL, (int32_t)i, (int32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
+	}
+	
+	wsVulkanPrint("uniform buffer creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	return result;
+}
+void wsVulkanUpdateUniformBuffer(uint32_t current_frame, time_t delta_time)
+{
+	wsVulkanUBO ubo = {};
+	
+	// Model matrix.
+	vec3 rotation_axis = {0.0f, 0.0f, 1.0f};
+	static float rotation_amount = M_PI_2;
+	rotation_amount += delta_time / 250.0f;
+	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
+	glm_rotate(ubo.model, rotation_amount, rotation_axis);
+	printf("%f\n", delta_time * M_PI_2);
+	
+	// View matrix.
+	vec3 eyeball_position = {2.0f, 2.0f, 2.0f};
+	vec3 center_position = {0.0f, 0.0f, 0.0f};
+	vec3 up_axis = {0.0f, 0.0f, 1.0f};
+	glm_lookat(eyeball_position, center_position, up_axis, ubo.view);
+	
+	// Projection matrix.
+	float fov = 90.0f;
+	float near = 0.1f;
+	float far = 10.0f;
+	glm_perspective(fov, (vk->swapchain.extent.width / (float)vk->swapchain.extent.height), near, far, ubo.proj);
+	ubo.proj[1][1] *= -1;
+	
+	// We may crash when we dereference a void* here.
+	memcpy(vk->uniformbuffers_mapped[current_frame], &ubo, sizeof(ubo));
+}
+VkResult wsVulkanCreateDescriptorPool()
+{
+	VkDescriptorPoolSize pool_size = {};
+	pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	pool_size.descriptorCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	
+	VkDescriptorPoolCreateInfo pool_info = {};
+	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	pool_info.poolSizeCount = 1;
+	pool_info.pPoolSizes = &pool_size;
+	pool_info.maxSets = WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	pool_info.flags = 0;	// Optional.
+	
+	VkResult result = vkCreateDescriptorPool(vk->logical_device, &pool_info, NULL, &vk->descriptorpool);
+	wsVulkanPrint("descriptor pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	return result;
+}
+VkResult wsVulkanCreateDescriptorSets()
+{
+	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSetLayout));
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+		{ memcpy(&layouts[i], &vk->descriptorset_layout, sizeof(VkDescriptorSetLayout)); }
+	
+	VkDescriptorSetAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	alloc_info.descriptorPool = vk->descriptorpool;
+	alloc_info.descriptorSetCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	alloc_info.pSetLayouts = &layouts[0];
+	
+	vk->descriptorsets = (VkDescriptorSet*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSet));
+	
+	VkResult result = vkAllocateDescriptorSets(vk->logical_device, &alloc_info, &vk->descriptorsets[0]);
+	wsVulkanPrint("descriptor set allocation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	if(result != VK_SUCCESS)
+		{ return result; }
+	free(layouts);	// Causes crash?  Maybe!
+	
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		VkDescriptorBufferInfo buffer_info = {};
+		buffer_info.buffer = vk->uniformbuffers[i];
+		buffer_info.offset = 0;
+		buffer_info.range = sizeof(wsVulkanUBO);
+		
+		VkWriteDescriptorSet descriptor_write = {};
+		descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptor_write.dstSet = vk->descriptorsets[i];
+		descriptor_write.dstBinding = 0;
+		descriptor_write.dstArrayElement = 0;
+		descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptor_write.descriptorCount = 1;
+		descriptor_write.pBufferInfo = &buffer_info;
+		descriptor_write.pImageInfo = NULL;			// Optional.
+		descriptor_write.pTexelBufferView = NULL;	// Optional.
+		
+		vkUpdateDescriptorSets(vk->logical_device, 1, &descriptor_write, 0, NULL);
+	}
+	
+	return result;
+}
 
-void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height) {
+void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height)
+{
 	// window = glfwGetWindowUserPointer(window);
 	vk->swapchain.framebuffer_hasresized = true;
 }
-VkResult wsVulkanCreateFrameBuffers() {
+VkResult wsVulkanCreateFrameBuffers()
+{
 	
 	VkResult result;
 	vk->swapchain.framebuffers = malloc(vk->swapchain.num_images * sizeof(VkFramebuffer));
@@ -750,8 +898,26 @@ VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID) {
 	wsVulkanPrint("shader module creation", shaderID, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return module;
 }
-VkResult wsVulkanCreateGraphicsPipeline() {
-
+VkResult wsVulkanCreateDescriptorSetLayout()
+{
+	VkDescriptorSetLayoutBinding ubo_layoutbinding = {};
+	ubo_layoutbinding.binding = 0;
+	ubo_layoutbinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	ubo_layoutbinding.descriptorCount = 1;
+	ubo_layoutbinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	ubo_layoutbinding.pImmutableSamplers = NULL;
+	
+	VkDescriptorSetLayoutCreateInfo layout_info = {};
+	layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layout_info.bindingCount = 1;
+	layout_info.pBindings = &ubo_layoutbinding;
+	
+	VkResult result = vkCreateDescriptorSetLayout(vk->logical_device, &layout_info, NULL, &vk->descriptorset_layout);
+	wsVulkanPrint("descriptor set layout", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	return result;
+}
+VkResult wsVulkanCreateGraphicsPipeline()
+{
 	// ---------------------
 	// CREATE SHADER MODULES
 	// ---------------------
@@ -838,7 +1004,7 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	rasterizer_info.lineWidth = 1.0f;						// Enabling the wideLines GPU feature is required for any value above 1.0f.
 	
 	rasterizer_info.cullMode = VK_CULL_MODE_BACK_BIT;	// Back-face culling, baybey!
-	rasterizer_info.frontFace = VK_FRONT_FACE_CLOCKWISE;// Specifies vertex order for faced to be considered front-facing.
+	rasterizer_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;// Specifies vertex order for faced to be considered front-facing.
 	
 	/* Controls whether rasterizer should modify depth values of a fragment by a constant, based on the fragment's slope, or not at all.  
 		Allegedly, this is sometimes used for shadow mapping. */
@@ -902,10 +1068,8 @@ VkResult wsVulkanCreateGraphicsPipeline() {
 	// Specify pipeline layout creation info.
 	VkPipelineLayoutCreateInfo pipelinelayout_info = {};
 	pipelinelayout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	
-	pipelinelayout_info.setLayoutCount = 0;
-	pipelinelayout_info.pSetLayouts	= NULL;
-	
+	pipelinelayout_info.setLayoutCount = 1;
+	pipelinelayout_info.pSetLayouts	= &vk->descriptorset_layout;
 	pipelinelayout_info.pushConstantRangeCount = 0;
 	pipelinelayout_info.pPushConstantRanges	= NULL;
 	
@@ -1177,7 +1341,6 @@ void wsVulkanQuerySwapChainSupport() {
 }
 VkResult wsVulkanCreateSurface()
 {	// Creates a surface bound to our GLFW window.
-	
 	VkResult result = glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
 	wsVulkanPrint("surface creation for window", vk->windowID, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
@@ -1471,10 +1634,10 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device) {
 	uint32_t num_required_extensions = 1;
 	const char* required_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-	printf("%i device-specific Vulkan extensions required: \n", num_required_extensions);
-	for(int32_t i = 0; i < num_required_extensions; i++) {
-		printf("\t%s\n", required_extensions[i]);
-	}
+	printf("\t%i device-specific Vulkan extensions required: ", num_required_extensions);
+	for(int32_t i = 0; i < num_required_extensions; i++)
+		{ printf("\t%s", required_extensions[i]); }
+	printf("\n");
 
 	// Search for each required extension.
 	for(uint32_t i = 0; i < num_required_extensions; i++) {

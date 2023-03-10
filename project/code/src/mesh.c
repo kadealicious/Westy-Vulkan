@@ -83,7 +83,7 @@ uint8_t wsMeshCreate()
 	md->vertices[meshID][3].position[0] = -0.5f;
 	md->vertices[meshID][3].position[1] = 0.5f;
 	md->vertices[meshID][3].color[0] = 1.0f;
-	md->vertices[meshID][3].color[1] = 0.0f;
+	md->vertices[meshID][3].color[1] = 1.0f;
 	md->vertices[meshID][3].color[2] = 1.0f;
 	
 	
@@ -108,7 +108,7 @@ uint8_t wsMeshCreate()
     md->isloaded[meshID] = WS_MESH_LOADED;
 	md->num_active_meshes++;
 	
-	wsMeshPrintMeshData(meshID);
+	// wsMeshPrintMeshData(meshID);
 	
     printf("INFO: Mesh w/ ID %i initialized!\n", meshID);
 	wsMeshConsolidateBuffer();
@@ -123,6 +123,8 @@ void wsMeshUnload(uint8_t* meshIDs, uint8_t num_meshes)
 		for(uint8_t i = 0; i < num_meshes; i++)
 			{ free(md->vertices[i]); }
 		for(uint8_t i = 0; i < num_meshes; i++)
+			{ free(md->indices[i]); }
+		for(uint8_t i = 0; i < num_meshes; i++)
 			{ free(md->attribute_descs[i]); }
 		for(uint8_t i = 0; i < num_meshes; i++)
 			{ md->isloaded[i] = WS_MESH_UNLOADED; }
@@ -132,6 +134,8 @@ void wsMeshUnload(uint8_t* meshIDs, uint8_t num_meshes)
 	{	// IF we need to free only a few meshes.
 		for(uint8_t i = 0; i < num_meshes; i++)
 			{ free(md->vertices[meshIDs[i]]); }
+		for(uint8_t i = 0; i < num_meshes; i++)
+			{ free(md->indices[meshIDs[i]]); }
 		for(uint8_t i = 0; i < num_meshes; i++)
 			{ free(md->attribute_descs[meshIDs[i]]); }
 		for(uint8_t i = 0; i < num_meshes; i++)
@@ -195,6 +199,12 @@ void wsMeshConsolidateBuffer()
 			}
 		}
 	}
+	
+	/*printf("%i active meshes: \n", md->num_active_meshes);
+	for(uint8_t i = 0; i < WS_MESH_MAX_MESHES; i++)
+	{
+		printf("\tMesh %i, isloaded = %i: %i vertices, %i indices\n", i, md->isloaded[i], md->num_vertices[i], md->num_indices[i]);
+	}*/
 	
 	printf("INFO: %i meshes consolidated successfully!\n", num_consolidated);
 }

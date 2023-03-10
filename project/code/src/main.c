@@ -1,5 +1,6 @@
 #include<stdio.h>
 #include<stdbool.h>
+#include<time.h>
 
 #define CGLM_FORCE_RADIANS
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -13,7 +14,6 @@
 #include"h/input.h"
 #include"h/vulkan_interface.h"
 #include"h/mesh.h"
-
 
 // Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
 #define DEBUG 1
@@ -45,9 +45,18 @@ int main(int argc, char* argv[]) {
 	// Main loop.
 	printf("\n===START%s RUN===\n", DEBUG ? " DEGUB" : "");
 	
-	while(!glfwWindowShouldClose(window)) {
-		
+	// TODO: INSTALL C11 SO THIS SHIT WORKS (YOU'LL NEED TO MODIFY THE MAKEFILE AS WELL)
+	// struct timespec time_info = {};
+	time_t start_time	= 0;
+	time_t now_time		= 0;
+	time_t delta_time	= 0;
+	
+	while(!glfwWindowShouldClose(window))
+	{
 		// Pre-logic-step.
+		/* timespec_get(&time_info, TIME_UTC);
+		start_time = time_info.tv_nsec; */
+		
 		wsInputUpdate();
 		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE)) {
 			printf("INFO: User has requested window should close!\n");
@@ -63,9 +72,13 @@ int main(int argc, char* argv[]) {
 		
 		
 		// Post-logic step.
-		wsVulkanDrawFrame(&vk);
+		delta_time = 16;
+		wsVulkanDrawFrame(delta_time);
 		
-		
+		/* timespec_get(&time_info, TIME_UTC);
+		now_time = time_info.tv_nsec;
+		delta_time = (now_time - start_time);
+		printf("%f %f %f\n", start_time, now_time, delta_time); */
 	}
 	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	
