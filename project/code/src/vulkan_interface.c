@@ -7,7 +7,10 @@
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include<CGLM/cglm.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include"h/stb_image.h"
 
 #include"h/vulkan_interface.h"
 #include"h/window.h"
@@ -61,12 +64,15 @@ VkResult wsVulkanCreateCommandPool();		// Create command pool for queueing comma
 VkResult wsVulkanCreateCommandBuffers();	// Creates command buffer for holding commands.
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
 
+VkResult wsVulkanCreateTextureImage();
+
 VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size);
 VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory);
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 VkResult wsVulkanCreateUniformBuffers();
 void wsVulkanUpdateUniformBuffer(uint32_t current_frame, time_t delta_time);
+
 VkResult wsVulkanCreateDescriptorPool();
 VkResult wsVulkanCreateDescriptorSets();
 
@@ -222,6 +228,8 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
+	
+	wsVulkanCreateTextureImage();
 	
 	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
 	wsVulkanCreateIndexBuffer(NULL, 0);
@@ -546,6 +554,62 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 	printf("ERROR: Vulkan memory type not found!\n");
 	return WS_VULKAN_NULL;
 }
+
+VkResult wsVulkanCreateTextureImage(const char* path)
+{
+	// First, load the image using stb_image.h.
+	int tex_width;
+	int tex_height;
+	int tex_channels;
+	stbi_uc* pixel_data = stbi_load(path, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
+	VkDeviceSize img_size = tex_width * tex_height * 4;	// For STBI_rgb_alpha, there will be 4 bytes needed per pixel.
+	if(!pixel_data)
+		{ printf("ERROR: Failed to load texture at path \"%s\"!\n", path); }
+	else printf("INFO: Texture at path \"%s\" of dimension %ix%i w/ %i channels successfully loaded!\n", 
+		path, tex_width, tex_height, tex_channels);
+	
+	// Next, store the image data into a host(CPU)-visible buffer for staging.
+	VkBuffer stagingbuffer;
+	VkDeviceMemory stagingbuffer_memory;
+	wsVulkanCreateBuffer(img_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingbuffer, &stagingbuffer_memory);
+	
+	// Copy pixel data into staging buffer & clean up original pixel array.
+	void* data;
+	vkMapMemory(vk->logical_device, stagingbuffer_memory, 0, img_size, 0, &data);
+		memcpy(data, pixel_data, (size_t)img_size);
+	vkUnmapMemory(vk->logical_device, stagingbuffer_memory);
+	stbi_image_free(pixel_data);
+	
+	// Initialize VkImage inside of struct vk.
+	VkImageCreateInfo image_info = {};
+	image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	image_info.imageType = VK_IMAGE_TYPE_2D;
+	image_info.extent.width = tex_width;
+	image_info.extent.height = tex_height;
+	image_info.extent.depth = 1;
+	image_info.mipLevels = 1;
+	image_info.arrayLayers = 1;
+	
+	// TODO: BEGIN HERE: https://vulkan-tutorial.com/en/Texture_mapping/Images
+	/*
+	AFTER THIS PART: 
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent.width = static_cast<uint32_t>(texWidth);
+		imageInfo.extent.height = static_cast<uint32_t>(texHeight);
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = 1;
+		imageInfo.arrayLayers = 1;
+	
+	
+	*/
+	
+	VkResult result;
+	return result;
+}
+
 VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size)
 {
 	VkCommandBufferAllocateInfo alloc_info = {};
@@ -712,7 +776,6 @@ void wsVulkanUpdateUniformBuffer(uint32_t current_frame, time_t delta_time)
 	rotation_amount += delta_time / 250.0f;
 	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
 	glm_rotate(ubo.model, rotation_amount, rotation_axis);
-	printf("%f\n", delta_time * M_PI_2);
 	
 	// View matrix.
 	vec3 eyeball_position = {2.0f, 2.0f, 2.0f};

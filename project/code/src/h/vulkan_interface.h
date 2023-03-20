@@ -91,6 +91,9 @@ typedef struct wsVulkan
 	VkCommandPool commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
 	VkCommandBuffer* commandbuffers;	// Buffer(s) used for recording commands to for sending to command pool.
 	
+	VkImage textureimage;
+	VkDeviceMemory textureimage_memory;
+	
 	wsMesh meshbuffer;					// Contains all raw vertex/index data.
 	VkBuffer vertexbuffer;				// TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.
 	VkDeviceMemory vertexbuffer_memory;	// Contains memory used by vertex buffer to store all vertices/indices/etc.

@@ -10,7 +10,7 @@ _OBJS = main.o window.o input.o vulkan_interface.o shader.o mesh.o
 OBJS = $(patsubst %, $(OBJDIR)/%,$(_OBJS))
 _SRCS = main.c window.c input.c vulkan_interface.c shader.c mesh.c
 SRCS = $(patsubst %, $(SRCDIR)/%,$(_SRCS))
-_HEADS = window.h input.h vulkan_interface.h shader.h mesh.h
+_HEADS = window.h input.h vulkan_interface.h shader.h mesh.h stb_image.h
 HEADS = $(patsubst %, $(HEADDIR)/%,$(_HEADS))
 
 all: app
