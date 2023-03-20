@@ -6,27 +6,29 @@
 wsWindow* wnd;	// Contains pointer to all GLFW window data.
 
 // GLFW callback functions.
-void wsWindowGLFWErrorCallback(int code, const char* description) {
+void wsWindowGLFWErrorCallback(int code, const char* description)
+{
 	printf("ERROR: GLFW code %i: %s\n", code, description);
 }
 
 // Call before wsVulkanInit().  Returns window ID.
-int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* window_data) {
-	
+int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* window_data) 
+{
 	static uint8_t windowID = 0;// Current window ID.
-	
-	// If current windowID is already in use, find another!  Otherwise, return -1.
-	for(uint8_t i = windowID; wnd->ptr != NULL; i++) {
-		if(i >= NUM_MAX_WINDOWS) {
-			printf("ERROR: You have reached the maximum number of GLFW windows at %i; failed to create another!\n", NUM_MAX_WINDOWS);
-			return -1;
-		}
-	}
-	
 	
 	// Point to program data!!!
 	wnd = window_data;
 	
+	// TODO: MAKE THIS WORK
+	// If current windowID is already in use, find another!  Otherwise, return -1.
+	/*for(uint8_t i = windowID; wnd->ptr != NULL; i++)
+	{
+		if(i >= NUM_MAX_WINDOWS)
+		{
+			printf("ERROR: You have reached the maximum number of GLFW windows at %i; failed to create another!\n", NUM_MAX_WINDOWS);
+			return -1;
+		}
+	}*/
 	
 	glfwInit();
 	
@@ -43,7 +45,8 @@ int16_t wsWindowInit(uint16_t window_width, uint16_t window_height, wsWindow* wi
 	
 	return windowID++;
 }
-void wsWindowExit(uint8_t windowID) {
+void wsWindowExit(uint8_t windowID)
+{
 	glfwDestroyWindow(wsWindowGetPtr(windowID));
 	glfwTerminate();
 	
@@ -51,18 +54,26 @@ void wsWindowExit(uint8_t windowID) {
 }
 
 // [p]OOP rears its ugly head in the best possible way: getter methods.
-uint16_t wsWindowGetWidth(uint8_t windowID) {
+uint16_t wsWindowGetWidth(uint8_t windowID)
+{
 	return wnd->width[windowID];
 }
-uint16_t wsWindowGetHeight(uint8_t windowID) {
+
+uint16_t wsWindowGetHeight(uint8_t windowID)
+{
 	return wnd->height[windowID];
 }
-GLFWwindow* wsWindowGetPtr(uint8_t windowID) {
+
+GLFWwindow* wsWindowGetPtr(uint8_t windowID)
+{
 	return wnd->ptr[windowID];
 }
+
 int16_t wsWindowGetID(GLFWwindow* window) {
-	for(int i = 0; i < NUM_MAX_WINDOWS; i++) {
-		if(window == wsWindowGetPtr(i)) {
+	for(int i = 0; i < NUM_MAX_WINDOWS; i++)
+	{
+		if(window == wsWindowGetPtr(i))
+		{
 			return i;
 		}
 	}

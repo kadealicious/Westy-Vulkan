@@ -229,7 +229,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	
-	wsVulkanCreateTextureImage();
+	wsVulkanCreateTextureImage("textures/statue.jpg");
 	
 	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
 	wsVulkanCreateIndexBuffer(NULL, 0);
@@ -663,7 +663,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	buffer_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
 	
 	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, buffer);
-	wsVulkanPrint("buffer creation", (int32_t)buffer, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("buffer creation", (intptr_t)buffer, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	
 	// Specify vertex buffer memory requirements.
@@ -678,7 +678,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	
 	// Allocate and bind buffer memory to appropriate vertex buffer.
 	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, buffer_memory);
-	wsVulkanPrint("buffer memory allocation", (int32_t)buffer_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("buffer memory allocation", (intptr_t)buffer_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	if(result != VK_SUCCESS)
 		{ return result; }
 	
@@ -1166,7 +1166,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	pipeline_info.subpass = 0;
 	
 	// Specify if we should "derive" from a parent pipeline for creation.
-	pipeline_info.basePipelineHandle = (int)NULL;
+	pipeline_info.basePipelineHandle = NULL;
 	pipeline_info.basePipelineIndex = -1;
 	
 	result = vkCreateGraphicsPipelines(vk->logical_device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &vk->pipeline);
@@ -1805,8 +1805,8 @@ void wsVulkanAddDebugExtensions(const char*** extensions, uint32_t* num_extensio
 	// Append Debug utility extension to list.
 	debug_extensions[*num_extensions] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 	
-	// FREE MEMORY!!!
-	free(extensions);
+	// FREE MEMORY!!!  Retrospective: This crashes...
+	// free(extensions);
 	
 	// Increment original number of extensions and return new extension list.
 	(*num_extensions)++;
@@ -1916,7 +1916,7 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	create_info->enabledLayerCount = num_required_layers;
 	create_info->ppEnabledLayerNames = (const char**)required_layers;
 	
-	printf("INFO: %i Vulkan validation layer(s) required: \n", num_required_layers);
+	printf("INFO: %u Vulkan validation layer(s) required: \n", (unsigned int)num_required_layers);
 	
 	for(int32_t i = 0; i < num_required_layers; i++) {
 		printf("\t%s\n", required_layers[i]);
@@ -1925,7 +1925,7 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info) {
 	
 	// FREE MEMORY!!!
 	free(available_layers);
-	// I believe this sometimes causes validation layers to cry.
+	// I believe this sometimes causes validation layers to cry (crash).
 	// free(required_layers);
 	
 	printf("\tRequired Vulkan validation layers are supported!\n");

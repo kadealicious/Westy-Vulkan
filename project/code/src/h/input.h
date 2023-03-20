@@ -23,19 +23,4 @@ void wsInputKeyCallback(GLFWwindow* window, int key, int scancode, int action, i
 void wsInputCursorPosCallback(GLFWwindow* window, double posx, double posy);
 void wsInputScrollCallback(GLFWwindow* window, double offsetx, double offsety);
 
-
-// Function for getting initial impulse of key press.
-char key_once[GLFW_KEY_LAST + 1];
-#define glfwGetKeyOnce(window, key)             \
-    (glfwGetKey(window, key) ?              \
-     (key_once[key] ? false : (key_once[key] = true)) :   \
-     (key_once[key] = false))
-
-// Function for getting initial impulse of key release.
-char key_nunce[GLFW_KEY_LAST + 1];
-#define glfwGetKeyReleasedOnce(window, key)             \
-    ((!glfwGetKey(window, key) && wsInputGetKeyLast() == key) ?              \
-     (key_nunce[key] ? false : (key_nunce[key] = true)) :   \
-     (key_nunce[key] = false))
-
 #endif

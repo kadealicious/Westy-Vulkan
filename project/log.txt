@@ -1,0 +1,31 @@
+Launching Vulkan Application:
+- Layers overridden by "Validation" configuration.
+- Application: Westy Vulkan
+- Executable: Q:\Programming\Projects\westy vulkan\project\app.exe
+- Working Directory: Q:\Programming\Projects\westy vulkan\project
+- Log file: Q:\Programming\Projects\westy vulkan\project\log.txt
+Assertion failed: instance != VK_NULL_HANDLE, file C:\Users\Kade\Documents\westy\src\lib\glfw-3.3.2\src\vulkan.c, line 305
+===BEGIN DEBUG===
+INFO: GLFW Window 0 created: res 640x480
+INFO: Input initialized: window ID 0, mouse sens 0.300000
+INFO: Mesh w/ ID 0 initialized!
+INFO: 0 meshes consolidated successfully!
+INFO: Meshes initialized!
+
+---BEGIN VULKAN INITIALIZATION---
+INFO: 3 Vulkan extension(s) required by GLFW: 
+	VK_KHR_surface
+	VK_KHR_win32_surface
+	VK_EXT_debug_utils
+	All GLFW-required Vulkan extensions are supported!
+INFO: 1 Vulkan validation layer(s) required: 
+	VK_LAYER_KHRONOS_validation
+	Required Vulkan validation layers are supported!
+ERROR: loader_get_json: Failed to open JSON file E:\Epic Games\Launcher\Portal\Extras\Overlay\EOSOverlayVkLayer-Win32.json
+ERROR: loader_get_json: Failed to open JSON file E:\Epic Games\Launcher\Portal\Extras\Overlay\EOSOverlayVkLayer-Win64.json
+WARNING: Layer VK_LAYER_OBS_HOOK uses API version 1.2 which is older than the application specified API version of 1.3. May cause issues.
+WARNING: Layer VK_LAYER_OBS_HOOK uses API version 1.2 which is older than the application specified API version of 1.3. May cause issues.
+ERROR: Requested layer "VK_LAYER_KHRONOS_validation" was wrong bit-type!
+ERROR: Vulkan instance creation failed with result code -6!
+ERROR: Vulkan debug messenger creation failed with result code -7!
+Process terminated

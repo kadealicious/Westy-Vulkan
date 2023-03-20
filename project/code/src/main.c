@@ -47,8 +47,8 @@ int main(int argc, char* argv[]) {
 	
 	// TODO: INSTALL C11 SO THIS SHIT WORKS (YOU'LL NEED TO MODIFY THE MAKEFILE AS WELL)
 	// struct timespec time_info = {};
-	time_t start_time	= 0;
-	time_t now_time		= 0;
+	/*time_t start_time	= 0;
+	time_t now_time		= 0;*/
 	time_t delta_time	= 0;
 	
 	while(!glfwWindowShouldClose(window))

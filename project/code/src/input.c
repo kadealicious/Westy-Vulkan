@@ -29,6 +29,20 @@ void wsInputInit(uint8_t windowID, float mouse_sensitivity) {
     printf("INFO: Input initialized: window ID %i, mouse sens %f\n", windowID, mouse_sensitivity);
 }
 
+// Function for getting initial impulse of key press.
+char key_once[GLFW_KEY_LAST + 1];
+#define glfwGetKeyOnce(window, key)             \
+    (glfwGetKey(window, key) ?              \
+     (key_once[key] ? false : (key_once[key] = true)) :   \
+     (key_once[key] = false))
+
+// Function for getting initial impulse of key release.
+char key_nunce[GLFW_KEY_LAST + 1];
+#define glfwGetKeyReleasedOnce(window, key)             \
+    ((!glfwGetKey(window, key) && wsInputGetKeyLast() == key) ?              \
+     (key_nunce[key] ? false : (key_nunce[key] = true)) :   \
+     (key_nunce[key] = false))
+
 int wsInputGetKeyLast()	{ return key_last; }
 bool wsInputGetKeyHold(int key)	{ return (glfwGetKey(wsWindowGetPtr(windowID), key) == GLFW_PRESS); }
 bool wsInputGetKeyPress(int key)	{ return (glfwGetKeyOnce(wsWindowGetPtr(windowID), key) == GLFW_PRESS); }
