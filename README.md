@@ -6,6 +6,7 @@ in 2022, after work on an OpenGL version throughout 2021.  I hope you enjoy my w
 
 - Github repo:	[github.com/kadealicious/Westy-Vulkan](https://github.com/kadealicious/Westy-Vulkan)
 - Trello board:	[trello.com/b/OENJ8jNS/westy-vulkan](https://trello.com/b/OENJ8jNS/westy-vulkan)
+<br>
 
 Created by:	**Kade Samson**
 <br>
