@@ -555,6 +555,56 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 	return WS_VULKAN_NULL;
 }
 
+VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
+{
+	// Initialize VkImage inside of struct vk.
+	VkImageCreateInfo image_info = {};
+	image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	image_info.imageType = VK_IMAGE_TYPE_2D;
+	image_info.extent.width = width;
+	image_info.extent.height = height;
+	image_info.extent.depth = 1;
+	image_info.mipLevels = 1;
+	image_info.arrayLayers = 1;
+	image_info.format = format;
+	image_info.tiling = tiling;
+	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_info.usage = usage;
+	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	image_info.flags = 0;	// Optional.
+	VkResult result = vkCreateImage(vk->logical_device, &image_info, NULL, image);
+	wsVulkanPrint("image creation", (uintptr_t)image, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	
+	// Specify memory requirements for image.
+	VkMemoryRequirements memory_requirements;
+	vkGetImageMemoryRequirements(vk->logical_device, *image, &memory_requirements);
+	
+	VkMemoryAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info.allocationSize = memory_requirements.size;
+	alloc_info.memoryTypeIndex = wsVulkanFindMemoryType(memory_requirements.memoryTypeBits, properties);
+	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, image_memory);
+	wsVulkanPrint("image memory allocation", (uintptr_t)image_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	
+	result = vkBindImageMemory(vk->logical_device, *image, *image_memory, 0);
+	return result;
+	
+	
+	
+	
+	
+	
+	
+	// TODO: START FROM "LAYOUT TRANSITIONS" SECTION HERE: https://vulkan-tutorial.com/en/Texture_mapping/Images
+	
+	
+	
+	
+	
+	
+	
+}
 VkResult wsVulkanCreateTextureImage(const char* path)
 {
 	// First, load the image using stb_image.h.
@@ -581,32 +631,9 @@ VkResult wsVulkanCreateTextureImage(const char* path)
 	vkUnmapMemory(vk->logical_device, stagingbuffer_memory);
 	stbi_image_free(pixel_data);
 	
-	// Initialize VkImage inside of struct vk.
-	VkImageCreateInfo image_info = {};
-	image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	image_info.imageType = VK_IMAGE_TYPE_2D;
-	image_info.extent.width = tex_width;
-	image_info.extent.height = tex_height;
-	image_info.extent.depth = 1;
-	image_info.mipLevels = 1;
-	image_info.arrayLayers = 1;
-	
-	// TODO: BEGIN HERE: https://vulkan-tutorial.com/en/Texture_mapping/Images
-	/*
-	AFTER THIS PART: 
-		VkImageCreateInfo imageInfo{};
-		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageInfo.extent.width = static_cast<uint32_t>(texWidth);
-		imageInfo.extent.height = static_cast<uint32_t>(texHeight);
-		imageInfo.extent.depth = 1;
-		imageInfo.mipLevels = 1;
-		imageInfo.arrayLayers = 1;
-	
-	
-	*/
-	
-	VkResult result;
+	// Create the image!
+	VkResult result = wsVulkanCreateImage(tex_width, tex_height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->textureimage, &vk->textureimage_memory);
+	wsVulkanPrint("image memory binding", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
 
@@ -663,7 +690,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	buffer_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
 	
 	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, buffer);
-	wsVulkanPrint("buffer creation", (intptr_t)buffer, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrintQuiet("buffer creation", (intptr_t)buffer, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	
 	
 	// Specify vertex buffer memory requirements.
@@ -678,7 +705,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	
 	// Allocate and bind buffer memory to appropriate vertex buffer.
 	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, buffer_memory);
-	wsVulkanPrint("buffer memory allocation", (intptr_t)buffer_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrintQuiet("buffer memory allocation", (intptr_t)buffer_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	if(result != VK_SUCCESS)
 		{ return result; }
 	

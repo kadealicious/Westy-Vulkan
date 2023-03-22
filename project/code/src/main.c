@@ -22,7 +22,8 @@
 void wsGLFWErrorCallback(int code, const char* description);
 
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
 	printf("===BEGIN%s===\n", DEBUG ? " DEBUG" : "");
 	
 	
