@@ -127,7 +127,7 @@ typedef struct wsVulkan
 
 // Vulkan external interfacing functions.
 void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
-VkResult wsVulkanDrawFrame(time_t delta_time);
+VkResult wsVulkanDrawFrame(double delta_time);
 void wsVulkanStop();
 
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Used for interfacing in window.c.

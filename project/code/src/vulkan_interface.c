@@ -27,7 +27,7 @@ void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
 // Main external calls to Vulkan.
 void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
-VkResult wsVulkanDrawFrame(time_t delta_time);
+VkResult wsVulkanDrawFrame(double delta_time);
 void wsVulkanStop();
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Passed to GLFW for the window resize event.
 
@@ -71,7 +71,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 VkResult wsVulkanCreateUniformBuffers();
-void wsVulkanUpdateUniformBuffer(uint32_t current_frame, time_t delta_time);
+void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time);
 
 VkResult wsVulkanCreateDescriptorPool();
 VkResult wsVulkanCreateDescriptorSets();
@@ -243,7 +243,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	
 	printf("---END VULKAN INITIALIZATION---\n");
 }
-VkResult wsVulkanDrawFrame(time_t delta_time)
+VkResult wsVulkanDrawFrame(double delta_time)
 {
 	// Wait for any important GPU tasks to finish up first.
 	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame], VK_TRUE, UINT64_MAX);
@@ -793,14 +793,14 @@ VkResult wsVulkanCreateUniformBuffers()
 	wsVulkanPrint("uniform buffer creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
 	return result;
 }
-void wsVulkanUpdateUniformBuffer(uint32_t current_frame, time_t delta_time)
+void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time)
 {
 	wsVulkanUBO ubo = {};
 	
 	// Model matrix.
 	vec3 rotation_axis = {0.0f, 0.0f, 1.0f};
 	static float rotation_amount = M_PI_2;
-	rotation_amount += delta_time / 250.0f;
+	rotation_amount += delta_time;
 	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
 	glm_rotate(ubo.model, rotation_amount, rotation_axis);
 	

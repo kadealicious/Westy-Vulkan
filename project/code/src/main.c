@@ -1,6 +1,7 @@
 #include<stdio.h>
 #include<stdbool.h>
 #include<time.h>
+#include<stdlib.h>
 
 #define CGLM_FORCE_RADIANS
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -18,6 +19,8 @@
 // Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
 #define DEBUG 1
 
+#define max(x,y) (((x) >= (y)) ? (x) : (y))
+#define min(x,y) (((x) <= (y)) ? (x) : (y))
 
 void wsGLFWErrorCallback(int code, const char* description);
 
@@ -46,17 +49,18 @@ int main(int argc, char* argv[])
 	// Main loop.
 	printf("\n===START%s RUN===\n", DEBUG ? " DEGUB" : "");
 	
-	// TODO: INSTALL C11 SO THIS SHIT WORKS (YOU'LL NEED TO MODIFY THE MAKEFILE AS WELL)
-	// struct timespec time_info = {};
-	/*time_t start_time	= 0;
-	time_t now_time		= 0;*/
-	time_t delta_time	= 0;
+	struct timespec time_info = {};
+	time_t time_start = 0;
+	time_t time_end = 0;
+	time_t time_delta = 0;
+	double time_delta_adj = 0;
 	
 	while(!glfwWindowShouldClose(window))
 	{
 		// Pre-logic-step.
-		/* timespec_get(&time_info, TIME_UTC);
-		start_time = time_info.tv_nsec; */
+		time_delta_adj = max(time_delta * 0.000000001, 0.0);
+		timespec_get(&time_info, TIME_UTC);
+		time_start = time_info.tv_nsec;
 		
 		wsInputUpdate();
 		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE)) {
@@ -73,13 +77,15 @@ int main(int argc, char* argv[])
 		
 		
 		// Post-logic step.
-		delta_time = 16;
-		wsVulkanDrawFrame(delta_time);
+		wsVulkanDrawFrame(time_delta_adj);
 		
-		/* timespec_get(&time_info, TIME_UTC);
-		now_time = time_info.tv_nsec;
-		delta_time = (now_time - start_time);
-		printf("%f %f %f\n", start_time, now_time, delta_time); */
+		if(DEBUG && time_delta < 0)
+		{
+			printf("INFO: Time is %lld\n", time_info.tv_sec);
+		}
+		timespec_get(&time_info, TIME_UTC);
+		time_end = time_info.tv_nsec;
+		time_delta = (time_end - time_start);
 	}
 	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	
