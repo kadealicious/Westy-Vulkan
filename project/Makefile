@@ -37,7 +37,6 @@ code/obj/mesh.o: code/src/mesh.c
 
 shaders: 
 	compile_shaders.bat
-	app.exe
 
 app: $(OBJS)
 	$(CC) $(CCFLAGS) -o $@ $^ $(CCLIBS)

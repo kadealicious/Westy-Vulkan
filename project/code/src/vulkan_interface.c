@@ -65,7 +65,11 @@ VkResult wsVulkanCreateCommandBuffers();	// Creates command buffer for holding c
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
 
 VkResult wsVulkanCreateTextureImage();
+void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new);
+void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
+VkResult wsVulkanBeginSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype);
+VkResult wsVulkanEndSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype);
 VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size);
 VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory);
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
@@ -93,6 +97,10 @@ void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMess
 static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msg_severity, VkDebugUtilsMessageTypeFlagsEXT msg_type, const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data);
 
 
+enum WS_VK_ID_STATE
+	{ WS_VK_NULL = INT32_MAX };
+enum WS_VK_COMMAND_TYPE
+	{ WS_VK_COMMAND_GRAPHICS, WS_VK_COMMAND_TRANSFER, WS_VK_COMMAND_QUEUE_OWNERSHIP_TRANSFER };
 
 
 // -------------------------------- //
@@ -101,29 +109,28 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 
 
 // Print statements for things that return a VkResult.
-enum WS_ID_STATES { WS_VULKAN_NULL = INT32_MAX };
 void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result)
 {
 	// If we have neither an ID nor fraction.
-	if(ID == WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
+	if(ID == WS_VK_NULL && numerator == WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
 		else printf("INFO: Vulkan %s success!\n", str);
 		
 		// If we have no ID but do have a fraction.
-	} else if(ID == WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
+	} else if(ID == WS_VK_NULL && numerator != WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
 		else printf("INFO: Vulkan %s %i/%i success!\n", str, numerator, denominator);
 		
 		// If we have an ID but no fraction.
-	} else if(ID != WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
+	} else if(ID != WS_VK_NULL && numerator == WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
 		else printf("INFO: Vulkan %s w/ ID %i success!\n", str, ID);
 		
 		// If we have both an ID & fraction.
-	} else if(ID != WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
+	} else if(ID != WS_VK_NULL && numerator != WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
 		else printf("INFO: Vulkan %s %i/%i w/ ID %i success!\n", str, numerator, denominator, ID);
@@ -132,22 +139,22 @@ void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denom
 void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result)
 {
 	// If we have neither an ID nor fraction.
-	if(ID == WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
+	if(ID == WS_VK_NULL && numerator == WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
 		
 		// If we have no ID but do have a fraction.
-	} else if(ID == WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
+	} else if(ID == WS_VK_NULL && numerator != WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
 		
 		// If we have an ID but no fraction.
-	} else if(ID != WS_VULKAN_NULL && numerator == WS_VULKAN_NULL) {
+	} else if(ID != WS_VK_NULL && numerator == WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
 		
 		// If we have both an ID & fraction.
-	} else if(ID != WS_VULKAN_NULL && numerator != WS_VULKAN_NULL) {
+	} else if(ID != WS_VK_NULL && numerator != WS_VK_NULL) {
 		if(result != VK_SUCCESS)
 			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
 	}
@@ -208,7 +215,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	
 	// Create Vulkan instance!
 	VkResult result = vkCreateInstance(&create_info, NULL, &vk->instance);
-	wsVulkanPrint("instance creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("instance creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	
 	
 	// Sends messages to stdout when debug messages occur.
@@ -298,7 +305,7 @@ VkResult wsVulkanDrawFrame(double delta_time)
 	
 	// Submit queue to be executed by Vulkan.
 	result = vkQueueSubmit(vk->queues.graphics_queue, 1, &submit_info, vk->inflight_fences[vk->swapchain.current_frame]);
-	wsVulkanPrintQuiet("draw command buffer submission", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrintQuiet("draw command buffer submission", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	
 	
 	// Configure presentation specification.
@@ -380,6 +387,9 @@ void wsVulkanStop()
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);	printf("INFO: Vulkan pipeline layout destroyed!\n");
 	wsVulkanDestroySwapChain();												// Already prints info messages!
 	
+	vkDestroyImage(vk->logical_device, vk->textureimage, NULL);
+	vkFreeMemory(vk->logical_device, vk->textureimage_memory, NULL);
+	
 	// Free UBO, vertex, & index buffer memory.
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -428,11 +438,11 @@ VkResult wsVulkanCreateSyncObjects() {
 	
 	// Create all semaphores & fences!
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);	wsVulkanPrint("\"image available?\" semaphore creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
+		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);	wsVulkanPrint("\"image available?\" semaphore creation", WS_VK_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);	wsVulkanPrint("\"render finished?\" semaphore creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
+		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);	wsVulkanPrint("\"render finished?\" semaphore creation", WS_VK_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);	wsVulkanPrint("\"in flight?\" semaphore creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
+		{ VkResult result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);	wsVulkanPrint("\"in flight?\" semaphore creation", WS_VK_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
 	
 	return VK_SUCCESS;
 }
@@ -445,7 +455,7 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	begin_info.pInheritanceInfo = NULL;
 	
 	VkResult result = vkBeginCommandBuffer(*commandbuffer, &begin_info);
-	wsVulkanPrintQuiet("command buffer recording begin", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrintQuiet("command buffer recording begin", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	
 	
 	// Begin render pass.
@@ -493,7 +503,7 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	
 	// End command buffer recording.
 	result = vkEndCommandBuffer(*commandbuffer);
-	wsVulkanPrintQuiet("command buffer recording end", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrintQuiet("command buffer recording end", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 VkResult wsVulkanCreateCommandBuffers() {
@@ -512,7 +522,7 @@ VkResult wsVulkanCreateCommandBuffers() {
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++) {
 		
 		VkResult result = vkAllocateCommandBuffers(vk->logical_device, &alloc_info, vk->commandbuffers);
-		wsVulkanPrint("command buffer creation", WS_VULKAN_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
+		wsVulkanPrint("command buffer creation", WS_VK_NULL, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
 	}
 	
 	return VK_SUCCESS;
@@ -525,7 +535,7 @@ VkResult wsVulkanCreateCommandPool()
 	graphicspool_info.queueFamilyIndex = vk->queues.ndx_graphics_family;
 	
 	VkResult result = vkCreateCommandPool(vk->logical_device, &graphicspool_info, NULL, &vk->commandpool_graphics);
-	wsVulkanPrint("graphics/presentation command pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("graphics/presentation command pool creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	if(result != VK_SUCCESS)
 		return result;
 	
@@ -535,7 +545,7 @@ VkResult wsVulkanCreateCommandPool()
 	transferpool_info.queueFamilyIndex = vk->queues.ndx_transfer_family;
 	
 	result = vkCreateCommandPool(vk->logical_device, &transferpool_info, NULL, &vk->commandpool_transfer);
-	wsVulkanPrint("transfer command pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("transfer command pool creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 
@@ -552,7 +562,7 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 	}
 	
 	printf("ERROR: Vulkan memory type not found!\n");
-	return WS_VULKAN_NULL;
+	return WS_VK_NULL;
 }
 
 VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
@@ -574,7 +584,7 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, V
 	image_info.samples = VK_SAMPLE_COUNT_1_BIT;
 	image_info.flags = 0;	// Optional.
 	VkResult result = vkCreateImage(vk->logical_device, &image_info, NULL, image);
-	wsVulkanPrint("image creation", (uintptr_t)image, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("image creation", (uintptr_t)image, WS_VK_NULL, WS_VK_NULL, result);
 	
 	// Specify memory requirements for image.
 	VkMemoryRequirements memory_requirements;
@@ -585,25 +595,10 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, V
 	alloc_info.allocationSize = memory_requirements.size;
 	alloc_info.memoryTypeIndex = wsVulkanFindMemoryType(memory_requirements.memoryTypeBits, properties);
 	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, image_memory);
-	wsVulkanPrint("image memory allocation", (uintptr_t)image_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("image memory allocation", (uintptr_t)image_memory, WS_VK_NULL, WS_VK_NULL, result);
 	
 	result = vkBindImageMemory(vk->logical_device, *image, *image_memory, 0);
 	return result;
-	
-	
-	
-	
-	
-	
-	
-	// TODO: START FROM "LAYOUT TRANSITIONS" SECTION HERE: https://vulkan-tutorial.com/en/Texture_mapping/Images
-	
-	
-	
-	
-	
-	
-	
 }
 VkResult wsVulkanCreateTextureImage(const char* path)
 {
@@ -633,25 +628,180 @@ VkResult wsVulkanCreateTextureImage(const char* path)
 	
 	// Create the image!
 	VkResult result = wsVulkanCreateImage(tex_width, tex_height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->textureimage, &vk->textureimage_memory);
-	wsVulkanPrint("image memory binding", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("image memory binding", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
+	
+	// Copy our staging buffer to a GPU/shader-suitable VkImage format.
+	wsVulkanTransitionImageLayout(vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	wsVulkanCopyBufferToImage(stagingbuffer, vk->textureimage, (uint32_t)tex_width, (uint32_t)tex_height);
+	wsVulkanTransitionImageLayout(vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	
+	// Clean up!
+	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
+	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);
+		
+	return result;
+}
+void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new)
+{
+	VkImageMemoryBarrier barrier_acquire = {};
+	VkImageMemoryBarrier barrier_release = {};	// Only used if a queue family ownership transfer is necessary.
+	barrier_acquire.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier_acquire.oldLayout = layout_old;
+	barrier_acquire.newLayout = layout_new;
+	barrier_acquire.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier_acquire.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier_acquire.image = image;
+	barrier_acquire.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier_acquire.subresourceRange.baseMipLevel = 0;
+	barrier_acquire.subresourceRange.levelCount = 1;
+	barrier_acquire.subresourceRange.baseArrayLayer = 0;
+	barrier_acquire.subresourceRange.layerCount = 1;
+	
+	// Set access masks and pipeline stages, so that fragment shaders will, when necessary, wait on the CPU to complete writing to image before reading.
+	VkPipelineStageFlags source_stage;
+	VkPipelineStageFlags dest_stage;
+	int32_t commandtype;
+	
+	if(layout_old == VK_IMAGE_LAYOUT_UNDEFINED && layout_new == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	{	// This case does not require a release barrier, as no queue family ownership changes occur.
+		commandtype = WS_VK_COMMAND_TRANSFER;
+		
+		barrier_acquire.srcAccessMask = 0;
+		barrier_acquire.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		dest_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		
+	} else if(layout_old == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && layout_new == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+	{	// This case requires a release barrier from transfer queue family to graphics queue family.
+		commandtype = WS_VK_COMMAND_QUEUE_OWNERSHIP_TRANSFER;
+		
+		barrier_release.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier_release.oldLayout = layout_old;
+		barrier_release.newLayout = layout_new;
+		barrier_release.srcQueueFamilyIndex = vk->queues.ndx_transfer_family;
+		barrier_release.dstQueueFamilyIndex = vk->queues.ndx_graphics_family;
+		barrier_release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier_release.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier_release.image = image;
+		barrier_release.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier_release.subresourceRange.baseMipLevel = 0;
+		barrier_release.subresourceRange.levelCount = 1;
+		barrier_release.subresourceRange.baseArrayLayer = 0;
+		barrier_release.subresourceRange.layerCount = 1;
+		
+		barrier_acquire.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier_acquire.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		
+		source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		dest_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else
+	{
+		printf("ERROR: Unsupported Vulkan image layout transition!\n");
+		printf("\tOld layout: %i, new layout: %i\n", layout_old, layout_new);
+	}
+	
+	
+	if(commandtype == WS_VK_COMMAND_QUEUE_OWNERSHIP_TRANSFER)
+	{
+		// Begin by transferring queue family ownership via a barrier; keep the stage the same, but indicate that the queue family should release ownership of the image.
+		VkCommandBuffer commandbuffer_transfer_ownership;
+		wsVulkanBeginSingleTimeCommands(&commandbuffer_transfer_ownership, WS_VK_COMMAND_QUEUE_OWNERSHIP_TRANSFER);
+			vkCmdPipelineBarrier(commandbuffer_transfer_ownership, source_stage, source_stage, 0, 0, NULL, 0, NULL, 1, &barrier_release);
+		wsVulkanEndSingleTimeCommands(&commandbuffer_transfer_ownership, WS_VK_COMMAND_QUEUE_OWNERSHIP_TRANSFER);
+		
+		/* Transfer the image to the graphics queue family, as graphics queue families implicitly support transfer queue operations as well 
+			as their own, including the VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT stage that we require here (which transfer queues do not support). */
+		VkCommandBuffer commandbuffer;
+		wsVulkanBeginSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_GRAPHICS);
+			vkCmdPipelineBarrier(commandbuffer, source_stage, dest_stage, 0, 0, NULL, 0, NULL, 1, &barrier_acquire);
+		wsVulkanEndSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_GRAPHICS);
+	} else 
+	{	// Because no queue family ownership transfer is required here, we can simply change our image's format without a release barrier;
+		VkCommandBuffer commandbuffer;
+		wsVulkanBeginSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
+			vkCmdPipelineBarrier(commandbuffer, source_stage, dest_stage, 0, 0, NULL, 0, NULL, 1, &barrier_acquire);
+		wsVulkanEndSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
+	}
+}
+void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+{
+	VkCommandBuffer commandbuffer;
+	wsVulkanBeginSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
+	
+	VkBufferImageCopy region = {};
+	region.bufferOffset = 0;
+	region.bufferRowLength = 0;
+	region.bufferImageHeight = 0;
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.mipLevel = 0;
+	region.imageSubresource.baseArrayLayer = 0;
+	region.imageSubresource.layerCount = 1;
+	region.imageOffset = (VkOffset3D){0, 0, 0};
+	region.imageExtent = (VkExtent3D){width, height, 1};
+	
+	vkCmdCopyBufferToImage(commandbuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	
+	wsVulkanEndSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
+}
+
+VkResult wsVulkanBeginSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype)
+{
+	VkCommandPool* commandpool;
+	if(commandtype == WS_VK_COMMAND_GRAPHICS)
+		{ commandpool = &vk->commandpool_graphics; }
+	else { commandpool = &vk->commandpool_transfer; }
+	
+	VkCommandBufferAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	alloc_info.commandPool = *commandpool;	// I bet this will crash, because I forget if I initialized this command pool.  I guess we'll see, won't we!
+	alloc_info.commandBufferCount = 1;
+	
+	vkAllocateCommandBuffers(vk->logical_device, &alloc_info, commandbuffer);
+	
+	VkCommandBufferBeginInfo begin_info = {};
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	
+	VkResult result = vkBeginCommandBuffer(*commandbuffer, &begin_info);
+	return result;
+}
+VkResult wsVulkanEndSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype)
+{
+	vkEndCommandBuffer(*commandbuffer);
+	
+	VkQueue* queue;
+	VkCommandPool* commandpool;
+	if(commandtype == WS_VK_COMMAND_GRAPHICS)
+	{
+		queue = &vk->queues.graphics_queue;
+		commandpool = &vk->commandpool_graphics;
+	} else
+	{
+		queue = &vk->queues.transfer_queue;
+		commandpool = &vk->commandpool_transfer;
+	}
+	
+	VkSubmitInfo submit_info = {};
+	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount = 1;
+	submit_info.pCommandBuffers = commandbuffer;
+	VkResult result = vkQueueSubmit(*queue, 1, &submit_info, VK_NULL_HANDLE);
+	
+	/* TODO: Make this use fences instead of waiting for the queue to idle; this 
+		would (allegedly) allow for multiple transfer commands to execute in parallel. */
+	vkQueueWaitIdle(*queue);
+	
+	vkFreeCommandBuffers(vk->logical_device, *commandpool, 1, commandbuffer);
+	
 	return result;
 }
 
 VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size)
 {
-	VkCommandBufferAllocateInfo alloc_info = {};
-	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	alloc_info.commandPool = vk->commandpool_transfer;	// I bet this will crash, because I forget if I initialized this command pool.  I guess we'll see, won't we!
-	alloc_info.commandBufferCount = 1;
 	VkCommandBuffer commandbuffer;
-	vkAllocateCommandBuffers(vk->logical_device, &alloc_info, &commandbuffer);
-	
-	
-	VkCommandBufferBeginInfo begin_info = {};
-	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	vkBeginCommandBuffer(commandbuffer, &begin_info);
+	wsVulkanBeginSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
 	
 		VkBufferCopy copyregion = {};
 		copyregion.srcOffset = 0;	// Optional.
@@ -659,20 +809,7 @@ VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSi
 		copyregion.size = size;
 		vkCmdCopyBuffer(commandbuffer, buffer_src, buffer_dst, 1, &copyregion);
 	
-	vkEndCommandBuffer(commandbuffer);
-	
-	
-	VkSubmitInfo submit_info = {};
-	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers = &commandbuffer;
-	VkResult result = vkQueueSubmit(vk->queues.transfer_queue, 1, &submit_info, VK_NULL_HANDLE);
-	
-	/* TODO: Make this use fences instead of waiting for the queue to idle; this 
-		would (allegedly) allow for multiple transfer commands to execute in parallel. */
-	vkQueueWaitIdle(vk->queues.transfer_queue);
-	
-	vkFreeCommandBuffers(vk->logical_device, vk->commandpool_transfer, 1, &commandbuffer);
+	VkResult result = wsVulkanEndSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
 	
 	return result;
 }
@@ -690,7 +827,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	buffer_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
 	
 	VkResult result = vkCreateBuffer(vk->logical_device, &buffer_info, NULL, buffer);
-	wsVulkanPrintQuiet("buffer creation", (intptr_t)buffer, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrintQuiet("buffer creation", (intptr_t)buffer, WS_VK_NULL, WS_VK_NULL, result);
 	
 	
 	// Specify vertex buffer memory requirements.
@@ -705,7 +842,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	
 	// Allocate and bind buffer memory to appropriate vertex buffer.
 	result = vkAllocateMemory(vk->logical_device, &alloc_info, NULL, buffer_memory);
-	wsVulkanPrintQuiet("buffer memory allocation", (intptr_t)buffer_memory, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrintQuiet("buffer memory allocation", (intptr_t)buffer_memory, WS_VK_NULL, WS_VK_NULL, result);
 	if(result != VK_SUCCESS)
 		{ return result; }
 	
@@ -787,10 +924,10 @@ VkResult wsVulkanCreateUniformBuffers()
 		// vk->uniformbuffers_mapped[i] = (void*)malloc(buffer_size);
 		result = vkMapMemory(vk->logical_device, vk->uniformbuffers_memory[i], 0, buffer_size, 0, &vk->uniformbuffers_mapped[i]);
 		
-		wsVulkanPrintQuiet("uniform buffer creation", WS_VULKAN_NULL, (int32_t)i, (int32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
+		wsVulkanPrintQuiet("uniform buffer creation", WS_VK_NULL, (int32_t)i, (int32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
 	}
 	
-	wsVulkanPrint("uniform buffer creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("uniform buffer creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time)
@@ -834,7 +971,7 @@ VkResult wsVulkanCreateDescriptorPool()
 	pool_info.flags = 0;	// Optional.
 	
 	VkResult result = vkCreateDescriptorPool(vk->logical_device, &pool_info, NULL, &vk->descriptorpool);
-	wsVulkanPrint("descriptor pool creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("descriptor pool creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 VkResult wsVulkanCreateDescriptorSets()
@@ -852,7 +989,7 @@ VkResult wsVulkanCreateDescriptorSets()
 	vk->descriptorsets = (VkDescriptorSet*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSet));
 	
 	VkResult result = vkAllocateDescriptorSets(vk->logical_device, &alloc_info, &vk->descriptorsets[0]);
-	wsVulkanPrint("descriptor set allocation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("descriptor set allocation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	if(result != VK_SUCCESS)
 		{ return result; }
 	free(layouts);	// Causes crash?  Maybe!
@@ -905,7 +1042,7 @@ VkResult wsVulkanCreateFrameBuffers()
 		framebuffer_info.layers = 1;
 		
 		result = vkCreateFramebuffer(vk->logical_device, &framebuffer_info, NULL, &vk->swapchain.framebuffers[i]);
-		wsVulkanPrintQuiet("framebuffer creation", WS_VULKAN_NULL, (i + 1), vk->swapchain.num_images, result);
+		wsVulkanPrintQuiet("framebuffer creation", WS_VK_NULL, (i + 1), vk->swapchain.num_images, result);
 		if(result != VK_SUCCESS)
 			break;
 	}
@@ -971,7 +1108,7 @@ VkResult wsVulkanCreateRenderPass() {
 	
 	// Self-explanatory copypasta code.	
 	VkResult result = vkCreateRenderPass(vk->logical_device, &renderpass_info, NULL, &vk->renderpass);
-	wsVulkanPrint("render pass creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("render pass creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID) {
@@ -985,7 +1122,7 @@ VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID) {
 	// Create and return shader module!
 	VkShaderModule module;
 	VkResult result = vkCreateShaderModule(vk->logical_device, &create_info, NULL, &module);
-	wsVulkanPrint("shader module creation", shaderID, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("shader module creation", shaderID, WS_VK_NULL, WS_VK_NULL, result);
 	return module;
 }
 VkResult wsVulkanCreateDescriptorSetLayout()
@@ -1003,7 +1140,7 @@ VkResult wsVulkanCreateDescriptorSetLayout()
 	layout_info.pBindings = &ubo_layoutbinding;
 	
 	VkResult result = vkCreateDescriptorSetLayout(vk->logical_device, &layout_info, NULL, &vk->descriptorset_layout);
-	wsVulkanPrint("descriptor set layout", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("descriptor set layout", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 VkResult wsVulkanCreateGraphicsPipeline()
@@ -1165,7 +1302,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	
 	// Create pipeline layout!  If unsuccessful, say so and return the result code as an integer.
 	VkResult result = vkCreatePipelineLayout(vk->logical_device, &pipelinelayout_info, NULL, &vk->pipeline_layout);
-	wsVulkanPrint("pipeline layout creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("pipeline layout creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	
 	// Specify graphics pipeline creation info.
 	VkGraphicsPipelineCreateInfo pipeline_info = {};
@@ -1202,7 +1339,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	vkDestroyShaderModule(vk->logical_device, vert_module, NULL);
 	vkDestroyShaderModule(vk->logical_device, frag_module, NULL);
 	
-	wsVulkanPrint("graphics pipeline creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("graphics pipeline creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 uint32_t wsVulkanCreateImageViews() {
@@ -1237,7 +1374,7 @@ uint32_t wsVulkanCreateImageViews() {
 		
 		// Create image view for each image view object!
 		VkResult result = vkCreateImageView(vk->logical_device, &create_info, NULL, &vk->swapchain.image_views[i]);
-		wsVulkanPrintQuiet("Image view creation", WS_VULKAN_NULL, i, vk->swapchain.num_images, result);
+		wsVulkanPrintQuiet("Image view creation", WS_VK_NULL, i, vk->swapchain.num_images, result);
 		if(result == VK_SUCCESS) num_created++;
 	}
 	
@@ -1304,7 +1441,7 @@ VkResult wsVulkanCreateSwapChain() {
 	printf("INFO: Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
 		vk->swapchain.extent.width, vk->swapchain.extent.height, vk->swapchain.surface_format.format, vk->swapchain.present_mode);
 	
-	wsVulkanPrint("swap chain creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("swap chain creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 void wsVulkanRecreateSwapChain() {
@@ -1432,7 +1569,7 @@ void wsVulkanQuerySwapChainSupport() {
 VkResult wsVulkanCreateSurface()
 {	// Creates a surface bound to our GLFW window.
 	VkResult result = glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
-	wsVulkanPrint("surface creation for window", vk->windowID, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("surface creation for window", vk->windowID, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char* const* validation_layers)
@@ -1501,7 +1638,7 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	free(queue_create_infos);
 	
 	
-	wsVulkanPrint("logical device creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("logical device creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 
@@ -1759,7 +1896,7 @@ VkResult wsVulkanInitDebugMessenger() {
 	
 	// Create debug messenger!
 	VkResult result = wsVulkanCreateDebugUtilsMessengerEXT(vk->instance, &create_info, NULL, &vk->debug_messenger);
-	wsVulkanPrint("debug messenger creation", WS_VULKAN_NULL, WS_VULKAN_NULL, WS_VULKAN_NULL, result);
+	wsVulkanPrint("debug messenger creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	
 	return result;
 }

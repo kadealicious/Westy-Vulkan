@@ -54,6 +54,7 @@ int main(int argc, char* argv[])
 	time_t time_end = 0;
 	time_t time_delta = 0;
 	double time_delta_adj = 0;
+	uint16_t num_frames = 0;
 	
 	while(!glfwWindowShouldClose(window))
 	{
@@ -81,11 +82,14 @@ int main(int argc, char* argv[])
 		
 		if(DEBUG && time_delta < 0)
 		{
-			printf("INFO: Time is %lld\n", time_info.tv_sec);
+			// TODO: Set window title to FPS instead of printing it.
+			printf("INFO: Time is %lld // %i fps\n", time_info.tv_sec, num_frames);
+			num_frames = 0;
 		}
 		timespec_get(&time_info, TIME_UTC);
 		time_end = time_info.tv_nsec;
 		time_delta = (time_end - time_start);
+		num_frames++;
 	}
 	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	
