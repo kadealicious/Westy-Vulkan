@@ -94,6 +94,9 @@ typedef struct wsVulkan
 	
 	VkImage textureimage;
 	VkDeviceMemory textureimage_memory;
+	VkImageView textureimage_view;
+	
+	VkSampler texturesampler;	// Texture sampler!
 	
 	wsMesh* meshbuffer;					// Contains all raw vertex/index data.
 	VkBuffer vertexbuffer;				// TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.

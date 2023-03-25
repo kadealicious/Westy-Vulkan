@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
 		mat4 proj;
 		
 		// Projection matrix.
-		float fov = 90.0f;
+		float fov = 45.0f;
 		float near = 0.1f;
 		float far = 10.0f;
 		glm_perspective(fov, wsVulkanGetAspectRatio(), near, far, proj);

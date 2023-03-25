@@ -65,6 +65,8 @@ VkResult wsVulkanCreateCommandPool();		// Create command pool for queueing comma
 VkResult wsVulkanCreateCommandBuffers();	// Creates command buffer for holding commands.
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
 
+VkResult wsVulkanCreateImageView();
+VkResult wsVulkanCreateTextureSampler();
 VkResult wsVulkanCreateTextureImage();
 void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new);
 void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
@@ -242,6 +244,8 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_dat
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	
 	wsVulkanCreateTextureImage("textures/statue.jpg");
+	wsVulkanCreateImageView(&vk->textureimage_view, &vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB);
+	wsVulkanCreateTextureSampler();
 	
 	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
 	wsVulkanCreateIndexBuffer(NULL, 0);
@@ -393,8 +397,11 @@ void wsVulkanStop()
 	vkDestroyPipelineLayout(vk->logical_device, vk->pipeline_layout, NULL);	printf("INFO: Vulkan pipeline layout destroyed!\n");
 	wsVulkanDestroySwapChain();												// Already prints info messages!
 	
-	vkDestroyImage(vk->logical_device, vk->textureimage, NULL);
-	vkFreeMemory(vk->logical_device, vk->textureimage_memory, NULL);
+	vkDestroySampler(vk->logical_device, vk->texturesampler, NULL);			printf("INFO: Vulkan texture sampler destroyed!\n");
+	
+	vkDestroyImageView(vk->logical_device, vk->textureimage_view, NULL);	printf("INFO: Vulkan image view destroyed!\n");
+	vkDestroyImage(vk->logical_device, vk->textureimage, NULL);				printf("INFO: Vulkan image destroyed!\n");
+	vkFreeMemory(vk->logical_device, vk->textureimage_memory, NULL);		printf("INFO: Vulkan image memory destroyed!\n");
 	
 	// Free UBO, vertex, & index buffer memory.
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
@@ -647,6 +654,29 @@ VkResult wsVulkanCreateTextureImage(const char* path)
 		
 	return result;
 }
+VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkFormat format)
+{
+	VkImageViewCreateInfo view_info = {};
+	view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	view_info.image = *image;
+	view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	view_info.format = format;
+	// Stick to default color mapping.
+	view_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	view_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	view_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	view_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	// subresourceRange describes what the image's purpose is, as well as which part of the image we will be accessing.
+	view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	view_info.subresourceRange.baseMipLevel = 0;
+	view_info.subresourceRange.levelCount = 1;
+	view_info.subresourceRange.baseArrayLayer = 0;
+	view_info.subresourceRange.layerCount = 1;
+	
+	VkResult result = vkCreateImageView(vk->logical_device, &view_info, NULL, image_view);
+	wsVulkanPrint("image view creation", (intptr_t)image_view, WS_VK_NULL, WS_VK_NULL, result);
+	return result;
+}
 void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new)
 {
 	VkImageMemoryBarrier barrier_acquire = {};
@@ -734,6 +764,46 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 			vkCmdPipelineBarrier(commandbuffer, source_stage, dest_stage, 0, 0, NULL, 0, NULL, 1, &barrier_acquire);
 		wsVulkanEndSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
 	}
+}
+VkResult wsVulkanCreateTextureSampler()
+{
+	VkSamplerCreateInfo sampler_info = {};
+	sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	sampler_info.magFilter = VK_FILTER_NEAREST;
+	sampler_info.minFilter = VK_FILTER_NEAREST;
+	sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	
+	// Query if our physical device supports anisotropy (Highly likely).
+	VkPhysicalDeviceFeatures device_features = {};
+	vkGetPhysicalDeviceFeatures(vk->physical_device, &device_features);
+	sampler_info.anisotropyEnable = device_features.samplerAnisotropy;
+	
+	// Get the maximum anisotropy level available to us, and use that!
+	if(device_features.samplerAnisotropy)
+	{
+		VkPhysicalDeviceProperties device_properties = {};
+		vkGetPhysicalDeviceProperties(vk->physical_device, &device_properties);
+		sampler_info.maxAnisotropy = device_properties.limits.maxSamplerAnisotropy;
+	} else
+	{
+		sampler_info.maxAnisotropy = 1.0f;
+	}
+	
+	sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	sampler_info.unnormalizedCoordinates = VK_FALSE;
+	sampler_info.compareEnable = VK_FALSE;
+	sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+	
+	sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	sampler_info.mipLodBias = 0.0f;
+	sampler_info.minLod = 0.0f;
+	sampler_info.maxLod = 0.0f;
+	
+	VkResult result = vkCreateSampler(vk->logical_device, &sampler_info, NULL, &vk->texturesampler);
+	wsVulkanPrint("texture sampler creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
+	return result;
 }
 void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
 {
@@ -1359,31 +1429,11 @@ uint32_t wsVulkanCreateImageViews() {
 	vk->swapchain.image_views = malloc(vk->swapchain.num_images * sizeof(VkImageView));
 
 	// Create image view for each swap chain image.
-	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
-		VkImageViewCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		create_info.image = vk->swapchain.images[i];
-		
-		create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		create_info.format = vk->swapchain.image_format;
-		
-		// Stick to default color mapping.
-		create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-		// subresourceRange describes what the images purpose is, as well as which part of the image we will be accessing.
-		create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		create_info.subresourceRange.baseMipLevel = 0;	// Mipping &...
-		create_info.subresourceRange.levelCount = 1;	// Mapping!
-		create_info.subresourceRange.baseArrayLayer = 0;
-		create_info.subresourceRange.layerCount = 1;
-		
-		// Create image view for each image view object!
-		VkResult result = vkCreateImageView(vk->logical_device, &create_info, NULL, &vk->swapchain.image_views[i]);
-		wsVulkanPrintQuiet("Image view creation", WS_VK_NULL, i, vk->swapchain.num_images, result);
-		if(result == VK_SUCCESS) num_created++;
+	for(uint32_t i = 0; i < vk->swapchain.num_images; i++)
+	{
+		VkResult result = wsVulkanCreateImageView(&vk->swapchain.image_views[i], &vk->swapchain.images[i], vk->swapchain.image_format);
+		if(result == VK_SUCCESS)
+			num_created++;
 	}
 	
 	if(num_created != vk->swapchain.num_images) {
@@ -1603,6 +1653,8 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	
 	// Used to specify device features that will be used.
 	VkPhysicalDeviceFeatures device_features = {};
+	vkGetPhysicalDeviceFeatures(vk->physical_device, &device_features);
+	device_features.samplerAnisotropy = device_features.samplerAnisotropy;	// Request sampler anisotropy feature be enabled for texture sampling later on.
 	
 	// Specify creation info for logical_gpuVK.
 	VkDeviceCreateInfo create_info = {};
@@ -1820,6 +1872,9 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device) {
 	// Program cannot function without geometry shaders!
 	if(!device_features.geometryShader)
 		return NO_GEOMETRY_SHADER;
+	// This is unfortunate if we cannot support anisotropy (as well as highly unlikely), but not the end of the world.
+	if(!device_features.samplerAnisotropy)
+		score -= 500;
 	
 	
 	// Program cannot function without certain queue families.
@@ -1847,7 +1902,9 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device) {
 	
 	
 	// If these are the same queue family, this could increase performance.
-	score += indices.ndx_graphics_family == indices.ndx_present_family ? 500 : 0;
+	score += indices.ndx_graphics_family == indices.ndx_present_family ? 1000 : 0;
+	// If these are separate queue families, this WILL increase performance.
+	score += indices.ndx_graphics_family != indices.ndx_transfer_family ? 2000 : 0;
 	
 	// Prefer discrete GPU.  If the max texture size is much lower on the discrete card, it might be too old and suck.
 	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
