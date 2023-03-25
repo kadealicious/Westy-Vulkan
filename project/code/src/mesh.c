@@ -27,9 +27,6 @@ void wsMeshInit(wsMesh* mesh_data) {
     md = mesh_data;
 	md->num_active_meshes = 0;
     
-	// Create test triangle!
-	uint8_t triangle_meshID = wsMeshCreate();
-    
     printf("INFO: Meshes initialized!\n");
 }
 void wsMeshStop()

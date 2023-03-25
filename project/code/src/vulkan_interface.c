@@ -14,7 +14,6 @@
 
 #include"h/vulkan_interface.h"
 #include"h/window.h"
-#include"h/shader.h"
 
 
 // Contains pointer to all Vulkan data.
@@ -26,10 +25,12 @@ uint8_t debug;
 void wsVulkanSetDebug(uint8_t debug_mode) { debug = debug_mode; }
 
 // Main external calls to Vulkan.
-void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
-VkResult wsVulkanDrawFrame(double delta_time);
+void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_data, uint8_t windowID);
+VkResult wsVulkanDrawFrame(double delta_time, uint8_t cameraID);
 void wsVulkanStop();
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Passed to GLFW for the window resize event.
+
+float wsVulkanGetAspectRatio();
 
 // Verify device and platform functionality with Vulkan.
 bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info);					// Enabled validation layers for detailed debugging.		
@@ -75,7 +76,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
 VkResult wsVulkanCreateUniformBuffers();
-void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time);
+void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time, uint8_t cameraID);
 
 VkResult wsVulkanCreateDescriptorPool();
 VkResult wsVulkanCreateDescriptorSets();
@@ -160,18 +161,22 @@ void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t 
 	}
 }
 
+float wsVulkanGetAspectRatio()
+	{ return (vk->swapchain.extent.width / (float)vk->swapchain.extent.height); }
+
 // Clamp function!  WHY DOESN'T C HAVE THIS BUILT IN
 uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num < min ? min : num;return t > max ? max : t;}
 
-void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
+void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_data, uint8_t windowID)
 {	// Call after wsWindowInit().
 	
 	// Non-Vulkan-specific initialization stuff.
 	vk = vulkan_data;								// Point to program data!!!
 	vk->swapchain.framebuffer_hasresized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
 	
-	wsMeshInit(&vk->meshbuffer);	// Allow models to exist for Vulkan.
-	mesh_data = &vk->meshbuffer;	// Pass this back to main.c for visibility.
+	vk->meshbuffer = mesh_data;	// Pass this back to main.c for visibility.
+	
+	vk->camera = camera_data;	// Pass this back to main.c for visibility.
 	
 	vk->windowID = windowID;																		// Specify which window we will be rendering to.
 	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
@@ -250,7 +255,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID)
 	
 	printf("---END VULKAN INITIALIZATION---\n");
 }
-VkResult wsVulkanDrawFrame(double delta_time)
+VkResult wsVulkanDrawFrame(double delta_time, uint8_t cameraID)
 {
 	// Wait for any important GPU tasks to finish up first.
 	vkWaitForFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame], VK_TRUE, UINT64_MAX);
@@ -275,7 +280,7 @@ VkResult wsVulkanDrawFrame(double delta_time)
 	}
 	
 	// This may be the incorrect argument; try "image_ndx"?
-	wsVulkanUpdateUniformBuffer(vk->swapchain.current_frame, delta_time);
+	wsVulkanUpdateUniformBuffer(vk->swapchain.current_frame, delta_time, cameraID);
 	
 	// Only reset fences if we know we will be submitting work to Vulkan with it.
 	vkResetFences(vk->logical_device, 1, &vk->inflight_fences[vk->swapchain.current_frame]);
@@ -360,7 +365,8 @@ VkResult wsVulkanDrawFrame(double delta_time)
 }
 void wsVulkanStop()
 {
-	wsMeshStop();	// Stop external systems that Vulkan uses first.
+	// Stop external Westy systems that Vulkan uses.
+	wsMeshStop();
 	
 	vkDeviceWaitIdle(vk->logical_device);	// Wait for all asynchronous elements to finish execution and return to an idle state before continuing on.sss
 	printf("\n---BEGIN VULKAN TERMINATION---\n");
@@ -495,7 +501,7 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	vkCmdBindIndexBuffer(*commandbuffer, vk->indexbuffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
 		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
-	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->meshbuffer.num_indices[0], 1, 0, 0, 0);
+	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->meshbuffer->num_indices[0], 1, 0, 0, 0);
 	
 	
 	// End render pass.
@@ -930,7 +936,7 @@ VkResult wsVulkanCreateUniformBuffers()
 	wsVulkanPrint("uniform buffer creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
-void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time)
+void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time, uint8_t cameraID)
 {
 	wsVulkanUBO ubo = {};
 	
@@ -942,17 +948,14 @@ void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time)
 	glm_rotate(ubo.model, rotation_amount, rotation_axis);
 	
 	// View matrix.
-	vec3 eyeball_position = {2.0f, 2.0f, 2.0f};
+	vec3 eyeball_position;
+	glm_vec3_copy(vk->camera->position[cameraID], eyeball_position);
 	vec3 center_position = {0.0f, 0.0f, 0.0f};
-	vec3 up_axis = {0.0f, 0.0f, 1.0f};
-	glm_lookat(eyeball_position, center_position, up_axis, ubo.view);
+	vec3 world_up = {0.0f, 0.0f, 1.0f};
+	glm_lookat(eyeball_position, center_position, world_up, ubo.view);
 	
 	// Projection matrix.
-	float fov = 90.0f;
-	float near = 0.1f;
-	float far = 10.0f;
-	glm_perspective(fov, (vk->swapchain.extent.width / (float)vk->swapchain.extent.height), near, far, ubo.proj);
-	ubo.proj[1][1] *= -1;
+	glm_mat4_copy(vk->camera->projection[cameraID], ubo.proj);
 	
 	// We may crash when we dereference a void* here.
 	memcpy(vk->uniformbuffers_mapped[current_frame], &ubo, sizeof(ubo));

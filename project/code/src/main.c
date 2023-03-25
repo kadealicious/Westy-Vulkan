@@ -15,6 +15,7 @@
 #include"h/input.h"
 #include"h/vulkan_interface.h"
 #include"h/mesh.h"
+#include"h/camera.h"
 
 // Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
 #define DEBUG 1
@@ -33,7 +34,8 @@ int main(int argc, char* argv[])
 	// Program data struct 0-initialization: 
 	wsWindow wnd = {};
 	wsVulkan vk = {};
-	wsMesh md;	// Handled in vulkan_interface.c.
+	wsMesh md = {};		// Managed in vulkan_interface.c.
+	wsCamera cm = {};
 	
 	
 	// Initialize GLFW.
@@ -41,9 +43,17 @@ int main(int argc, char* argv[])
 	GLFWwindow* window = wsWindowGetPtr(windowID);
 	wsInputInit(windowID, 0.3f);	// Bind keyboard input to our GLFW window.
 	
+	// Initialize cameras!
+	wsCameraInit(&cm);
+	uint8_t camera_main = wsCameraCreate();
+	
+	// Create test triangle!
+	wsMeshInit(&md);
+	uint8_t triangle_meshID = wsMeshCreate();
+	
 	// Initialize Vulkan.
 	wsVulkanSetDebug(DEBUG);
-	wsVulkanInit(&vk, &md, windowID);
+	wsVulkanInit(&vk, &md, &cm, windowID);
 	
 	
 	// Main loop.
@@ -69,6 +79,19 @@ int main(int argc, char* argv[])
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
 		
+		vec3 pos = {2.0f, 2.0f, 2.0f};
+		vec4 rot = {0.0f, 0.0f, 0.0f, 0.0f};
+		mat4 proj;
+		
+		// Projection matrix.
+		float fov = 90.0f;
+		float near = 0.1f;
+		float far = 10.0f;
+		glm_perspective(fov, wsVulkanGetAspectRatio(), near, far, proj);
+		proj[1][1] *= -1;
+		
+		wsCameraUpdateUBOFields(camera_main, &pos, &rot, &proj);
+		
 		
 		// Logic step.
 		// Not workie; make crashy :(
@@ -78,7 +101,7 @@ int main(int argc, char* argv[])
 		
 		
 		// Post-logic step.
-		wsVulkanDrawFrame(time_delta_adj);
+		wsVulkanDrawFrame(time_delta_adj, camera_main);
 		
 		if(DEBUG && time_delta < 0)
 		{
@@ -95,6 +118,7 @@ int main(int argc, char* argv[])
 	
 	
 	// Program exit procedure.
+	wsCameraStop();
 	wsVulkanStop(&vk);
 	wsWindowExit(windowID);
 	

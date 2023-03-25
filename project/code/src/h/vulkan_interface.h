@@ -9,6 +9,7 @@
 
 #include"shader.h"
 #include"mesh.h"
+#include"camera.h"
 
 
 #define WS_VULKAN_MAX_FRAMES_IN_FLIGHT 2
@@ -94,7 +95,7 @@ typedef struct wsVulkan
 	VkImage textureimage;
 	VkDeviceMemory textureimage_memory;
 	
-	wsMesh meshbuffer;					// Contains all raw vertex/index data.
+	wsMesh* meshbuffer;					// Contains all raw vertex/index data.
 	VkBuffer vertexbuffer;				// TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.
 	VkDeviceMemory vertexbuffer_memory;	// Contains memory used by vertex buffer to store all vertices/indices/etc.
 	VkBuffer indexbuffer;
@@ -119,6 +120,8 @@ typedef struct wsVulkan
 	
 	wsShader shader;	// Used for loading and interfacing with shaders.
 	
+	wsCamera* camera;
+	
 	uint8_t windowID;	// Used for interfacing with GLFW window.
 	VkSurfaceKHR surface;	// Window surface for drawing.
 	
@@ -126,10 +129,11 @@ typedef struct wsVulkan
 
 
 // Vulkan external interfacing functions.
-void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, uint8_t windowID);
-VkResult wsVulkanDrawFrame(double delta_time);
+void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_data, uint8_t windowID);
+VkResult wsVulkanDrawFrame(double delta_time, uint8_t cameraID);
 void wsVulkanStop();
 
+float wsVulkanGetAspectRatio();
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Used for interfacing in window.c.
 void wsVulkanSetDebug(uint8_t debug_mode);
 
