@@ -679,22 +679,27 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 		dest_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		
 	} else if(layout_old == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && layout_new == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-	{	// This case requires a release barrier from transfer queue family to graphics queue family.
-		commandtype = WS_VK_COMMAND_QUEUE_OWNERSHIP_TRANSFER;
+	{	/* If we are transferring to a shader-preferred layout AND our transfer queue is not the same as our graphics queue, 
+			then this case requires a release barrier from transfer queue family to graphics queue family. */
 		
-		barrier_release.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier_release.oldLayout = layout_old;
-		barrier_release.newLayout = layout_new;
-		barrier_release.srcQueueFamilyIndex = vk->queues.ndx_transfer_family;
-		barrier_release.dstQueueFamilyIndex = vk->queues.ndx_graphics_family;
-		barrier_release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier_release.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		barrier_release.image = image;
-		barrier_release.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier_release.subresourceRange.baseMipLevel = 0;
-		barrier_release.subresourceRange.levelCount = 1;
-		barrier_release.subresourceRange.baseArrayLayer = 0;
-		barrier_release.subresourceRange.layerCount = 1;
+		if(vk->queues.ndx_graphics_family != vk->queues.ndx_transfer_family)
+		{
+			commandtype = WS_VK_COMMAND_QUEUE_OWNERSHIP_TRANSFER;
+			
+			barrier_release.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			barrier_release.oldLayout = layout_old;
+			barrier_release.newLayout = layout_new;
+			barrier_release.srcQueueFamilyIndex = vk->queues.ndx_transfer_family;
+			barrier_release.dstQueueFamilyIndex = vk->queues.ndx_graphics_family;
+			barrier_release.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier_release.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			barrier_release.image = image;
+			barrier_release.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			barrier_release.subresourceRange.baseMipLevel = 0;
+			barrier_release.subresourceRange.levelCount = 1;
+			barrier_release.subresourceRange.baseArrayLayer = 0;
+			barrier_release.subresourceRange.layerCount = 1;
+		}
 		
 		barrier_acquire.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier_acquire.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
