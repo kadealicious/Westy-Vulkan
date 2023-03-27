@@ -1037,16 +1037,28 @@ void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time, uint
 }
 VkResult wsVulkanCreateDescriptorPool()
 {
-	VkDescriptorPoolSize pool_size = {};
-	pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	pool_size.descriptorCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	VkDescriptorPoolSize pool_sizes[2] = {};
+	pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	pool_sizes[0].descriptorCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	pool_sizes[1].descriptorCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
 	
 	VkDescriptorPoolCreateInfo pool_info = {};
 	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	pool_info.poolSizeCount = 1;
+	pool_info.poolSizeCount = 2;
 	pool_info.pPoolSizes = &pool_size;
 	pool_info.maxSets = WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
 	pool_info.flags = 0;	// Optional.
+	
+	
+	
+	
+	
+	// TODO: CONTINUE FROM HERE: https://vulkan-tutorial.com/Texture_mapping/Combined_image_sampler AT: "The final step is to bind the actual image and sampler resources to the descriptors in the descriptor set. Go to the createDescriptorSets function."
+	
+	
+	
+	
 	
 	VkResult result = vkCreateDescriptorPool(vk->logical_device, &pool_info, NULL, &vk->descriptorpool);
 	wsVulkanPrint("descriptor pool creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
@@ -1205,20 +1217,30 @@ VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID) {
 }
 VkResult wsVulkanCreateDescriptorSetLayout()
 {
-	VkDescriptorSetLayoutBinding ubo_layoutbinding = {};
-	ubo_layoutbinding.binding = 0;
-	ubo_layoutbinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	ubo_layoutbinding.descriptorCount = 1;
-	ubo_layoutbinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-	ubo_layoutbinding.pImmutableSamplers = NULL;
+	VkDescriptorSetLayoutBinding layoutbinding_ubo = {};
+	layoutbinding_ubo.binding = 0;
+	layoutbinding_ubo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	layoutbinding_ubo.descriptorCount = 1;
+	layoutbinding_ubo.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	layoutbinding_ubo.pImmutableSamplers = NULL;
 	
+	
+	VkDescriptorSetLayoutBinding layoutbinding_sampler = {};
+	layoutbinding_sampler.binding = 1;
+	layoutbinding_sampler.descriptorCount = 1;
+	layoutbinding_sampler.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	layoutbinding_sampler.pImmutableSamplers = NULL;
+	layoutbinding_sampler.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	
+	
+	VkDescriptorSetLayoutBinding bindings[2] = {layoutbinding_ubo, layoutbinding_sampler};
 	VkDescriptorSetLayoutCreateInfo layout_info = {};
 	layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layout_info.bindingCount = 1;
-	layout_info.pBindings = &ubo_layoutbinding;
+	layout_info.bindingCount = 2;
+	layout_info.pBindings = &layoutbinding_ubo;
 	
 	VkResult result = vkCreateDescriptorSetLayout(vk->logical_device, &layout_info, NULL, &vk->descriptorset_layout);
-	wsVulkanPrint("descriptor set layout", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
+	wsVulkanPrint("descriptor set layouts creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
 VkResult wsVulkanCreateGraphicsPipeline()
