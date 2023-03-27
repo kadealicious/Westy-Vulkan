@@ -64,29 +64,38 @@ uint8_t wsMeshCreate()
 	md->vertices[meshID][0].color[0] = 1.0f;
 	md->vertices[meshID][0].color[1] = 0.0f;
 	md->vertices[meshID][0].color[2] = 0.0f;
+	md->vertices[meshID][0].texcoord[0] = 1.0f;
+	md->vertices[meshID][0].texcoord[1] = 0.0f;
     
 	md->vertices[meshID][1].position[0] = 0.5f;
 	md->vertices[meshID][1].position[1] = -0.5f;
 	md->vertices[meshID][1].color[0] = 0.0f;
 	md->vertices[meshID][1].color[1] = 1.0f;
 	md->vertices[meshID][1].color[2] = 0.0f;
+	md->vertices[meshID][1].texcoord[0] = 0.0f;
+	md->vertices[meshID][1].texcoord[1] = 0.0f;
 	
 	md->vertices[meshID][2].position[0] = 0.5f;
 	md->vertices[meshID][2].position[1] = 0.5f;
 	md->vertices[meshID][2].color[0] = 0.0f;
 	md->vertices[meshID][2].color[1] = 0.0f;
 	md->vertices[meshID][2].color[2] = 1.0f;
+	md->vertices[meshID][2].texcoord[0] = 0.0f;
+	md->vertices[meshID][2].texcoord[1] = 1.0f;
 	
 	md->vertices[meshID][3].position[0] = -0.5f;
 	md->vertices[meshID][3].position[1] = 0.5f;
 	md->vertices[meshID][3].color[0] = 1.0f;
 	md->vertices[meshID][3].color[1] = 1.0f;
 	md->vertices[meshID][3].color[2] = 1.0f;
+	md->vertices[meshID][3].texcoord[0] = 1.0f;
+	md->vertices[meshID][3].texcoord[1] = 1.0f;
 	
 	
 	// Load indices.  Jesus Christ.
 	md->num_indices[meshID] = 6;
 	md->indices[meshID] = (uint16_t*)malloc(md->num_indices[meshID] * sizeof(uint16_t));
+	
 	md->indices[meshID][0] = 0;
 	md->indices[meshID][1] = 1;
 	md->indices[meshID][2] = 2;
@@ -238,10 +247,16 @@ void wsMeshSetAttributeDescriptions(uint8_t meshID) {
     md->attribute_descs[meshID][0].location = 0;
     md->attribute_descs[meshID][0].format = VK_FORMAT_R32G32_SFLOAT;
     md->attribute_descs[meshID][0].offset = offsetof(wsVertex, position);
+	
     md->attribute_descs[meshID][1].binding = 0;
     md->attribute_descs[meshID][1].location = 1;
     md->attribute_descs[meshID][1].format = VK_FORMAT_R32G32B32_SFLOAT;
     md->attribute_descs[meshID][1].offset = offsetof(wsVertex, color);
+	
+	md->attribute_descs[meshID][2].binding = 0;
+    md->attribute_descs[meshID][2].location = 2;
+    md->attribute_descs[meshID][2].format = VK_FORMAT_R32G32_SFLOAT;
+    md->attribute_descs[meshID][2].offset = offsetof(wsVertex, texcoord);
 }
 void wsMeshSetBindingDescription(uint8_t meshID) {
     

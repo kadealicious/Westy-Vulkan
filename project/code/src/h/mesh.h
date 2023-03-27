@@ -6,13 +6,14 @@
 #include<CGLM/cglm.h>
 
 #define WS_MESH_MAX_MESHES 100
-#define WS_MESH_MAX_ATTRIBUTE_DESCRIPTIONS 2
+#define WS_MESH_MAX_ATTRIBUTE_DESCRIPTIONS 3
 
 
 typedef struct wsVertex
 {
     vec2 position;
     vec3 color;
+	vec2 texcoord;
     
 } wsVertex;
 

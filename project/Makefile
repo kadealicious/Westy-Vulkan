@@ -5,9 +5,11 @@ CCLIBS = -lmingw32 glfw3.dll C:\Windows\System32\vulkan-1.dll
 SRCDIR = code/src
 HEADDIR = code/src/h
 OBJDIR = code/obj
+CLEANDIR = code\obj
 
 _OBJS = main.o window.o input.o vulkan_interface.o shader.o mesh.o camera.o
 OBJS = $(patsubst %, $(OBJDIR)/%,$(_OBJS))
+CLEANOBJS = $(patsubst %, $(CLEANDIR)\\%,$(_OBJS))
 _SRCS = main.c window.c input.c vulkan_interface.c shader.c mesh.c camera.c
 SRCS = $(patsubst %, $(SRCDIR)/%,$(_SRCS))
 _HEADS = stb_image.h window.h input.h vulkan_interface.h shader.h mesh.h camera.h
@@ -38,4 +40,4 @@ app: $(OBJS)
 
 .PHONY: app shaders clean
 clean: 
-	-del edit $(OBJS)
+	-del $(CLEANOBJS)

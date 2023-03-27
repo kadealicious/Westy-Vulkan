@@ -771,9 +771,9 @@ VkResult wsVulkanCreateTextureSampler()
 	sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	sampler_info.magFilter = VK_FILTER_NEAREST;
 	sampler_info.minFilter = VK_FILTER_NEAREST;
-	sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-	sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-	sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 	
 	// Query if our physical device supports anisotropy (Highly likely).
 	VkPhysicalDeviceFeatures device_features = {};
@@ -1046,19 +1046,9 @@ VkResult wsVulkanCreateDescriptorPool()
 	VkDescriptorPoolCreateInfo pool_info = {};
 	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	pool_info.poolSizeCount = 2;
-	pool_info.pPoolSizes = &pool_size;
+	pool_info.pPoolSizes = &pool_sizes[0];
 	pool_info.maxSets = WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
 	pool_info.flags = 0;	// Optional.
-	
-	
-	
-	
-	
-	// TODO: CONTINUE FROM HERE: https://vulkan-tutorial.com/Texture_mapping/Combined_image_sampler AT: "The final step is to bind the actual image and sampler resources to the descriptors in the descriptor set. Go to the createDescriptorSets function."
-	
-	
-	
-	
 	
 	VkResult result = vkCreateDescriptorPool(vk->logical_device, &pool_info, NULL, &vk->descriptorpool);
 	wsVulkanPrint("descriptor pool creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
@@ -1091,18 +1081,36 @@ VkResult wsVulkanCreateDescriptorSets()
 		buffer_info.offset = 0;
 		buffer_info.range = sizeof(wsVulkanUBO);
 		
-		VkWriteDescriptorSet descriptor_write = {};
-		descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptor_write.dstSet = vk->descriptorsets[i];
-		descriptor_write.dstBinding = 0;
-		descriptor_write.dstArrayElement = 0;
-		descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptor_write.descriptorCount = 1;
-		descriptor_write.pBufferInfo = &buffer_info;
-		descriptor_write.pImageInfo = NULL;			// Optional.
-		descriptor_write.pTexelBufferView = NULL;	// Optional.
+		VkDescriptorImageInfo image_info = {};
+		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		image_info.imageView = vk->textureimage_view;
+		image_info.sampler = vk->texturesampler;
 		
-		vkUpdateDescriptorSets(vk->logical_device, 1, &descriptor_write, 0, NULL);
+		
+		VkWriteDescriptorSet descriptor_writes[2] = {};
+		
+		descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptor_writes[0].dstSet = vk->descriptorsets[i];
+		descriptor_writes[0].dstBinding = 0;
+		descriptor_writes[0].dstArrayElement = 0;
+		descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptor_writes[0].descriptorCount = 1;
+		descriptor_writes[0].pBufferInfo = &buffer_info;
+		descriptor_writes[0].pImageInfo = NULL;			// Optional.
+		descriptor_writes[0].pTexelBufferView = NULL;	// Optional.
+		
+		descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptor_writes[1].dstSet = vk->descriptorsets[i];
+		descriptor_writes[1].dstBinding = 1;
+		descriptor_writes[1].dstArrayElement = 0;
+		descriptor_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descriptor_writes[1].descriptorCount = 1;
+		descriptor_writes[1].pImageInfo = &image_info;
+		descriptor_writes[1].pBufferInfo = NULL;			// Optional.
+		descriptor_writes[1].pTexelBufferView = NULL;	// Optional.
+		
+		
+		vkUpdateDescriptorSets(vk->logical_device, 2, &descriptor_writes[0], 0, NULL);
 	}
 	
 	return result;
@@ -1147,13 +1155,10 @@ VkResult wsVulkanCreateRenderPass() {
 	VkAttachmentDescription color_attachment = {};
 	color_attachment.format	= vk->swapchain.image_format;
 	color_attachment.samples= VK_SAMPLE_COUNT_1_BIT;
-	
 	color_attachment.loadOp	= VK_ATTACHMENT_LOAD_OP_CLEAR;
 	color_attachment.storeOp= VK_ATTACHMENT_STORE_OP_STORE;
-	
 	color_attachment.stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	color_attachment.stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	
 	color_attachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
 	color_attachment.finalLayout	= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	
@@ -1162,10 +1167,8 @@ VkResult wsVulkanCreateRenderPass() {
 	VkAttachmentReference colorattachment_reference = {};
 	colorattachment_reference.attachment= 0;
 	colorattachment_reference.layout	= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	
 	VkSubpassDescription subpass_desc = {};
 	subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	
 	subpass_desc.colorAttachmentCount = 1;
 	subpass_desc.pColorAttachments = &colorattachment_reference;
 	
@@ -1173,10 +1176,8 @@ VkResult wsVulkanCreateRenderPass() {
 	// Create render pass!
 	VkRenderPassCreateInfo renderpass_info = {};
 	renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-
 	renderpass_info.attachmentCount = 1;
 	renderpass_info.pAttachments = &color_attachment;
-	
 	renderpass_info.subpassCount= 1;
 	renderpass_info.pSubpasses	= &subpass_desc;
 	
@@ -1185,13 +1186,10 @@ VkResult wsVulkanCreateRenderPass() {
 	VkSubpassDependency dependency = {};
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency.dstSubpass = 0;
-	
 	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	dependency.srcAccessMask = 0;
-	
 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	
 	renderpass_info.dependencyCount = 1;
 	renderpass_info.pDependencies = &dependency;
 	
@@ -1219,8 +1217,8 @@ VkResult wsVulkanCreateDescriptorSetLayout()
 {
 	VkDescriptorSetLayoutBinding layoutbinding_ubo = {};
 	layoutbinding_ubo.binding = 0;
-	layoutbinding_ubo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	layoutbinding_ubo.descriptorCount = 1;
+	layoutbinding_ubo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	layoutbinding_ubo.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	layoutbinding_ubo.pImmutableSamplers = NULL;
 	
@@ -1229,15 +1227,15 @@ VkResult wsVulkanCreateDescriptorSetLayout()
 	layoutbinding_sampler.binding = 1;
 	layoutbinding_sampler.descriptorCount = 1;
 	layoutbinding_sampler.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	layoutbinding_sampler.pImmutableSamplers = NULL;
 	layoutbinding_sampler.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	layoutbinding_sampler.pImmutableSamplers = NULL;
 	
 	
 	VkDescriptorSetLayoutBinding bindings[2] = {layoutbinding_ubo, layoutbinding_sampler};
 	VkDescriptorSetLayoutCreateInfo layout_info = {};
 	layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	layout_info.bindingCount = 2;
-	layout_info.pBindings = &layoutbinding_ubo;
+	layout_info.pBindings = &bindings[0];
 	
 	VkResult result = vkCreateDescriptorSetLayout(vk->logical_device, &layout_info, NULL, &vk->descriptorset_layout);
 	wsVulkanPrint("descriptor set layouts creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
