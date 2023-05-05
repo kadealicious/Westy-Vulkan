@@ -4,8 +4,6 @@
 #include<string.h>
 #include<limits.h>
 
-#define GLFW_INCLUDE_VULKAN
-#include<GLFW/glfw3.h>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include<CGLM/cglm.h>
@@ -1016,18 +1014,16 @@ void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time, uint
 	wsVulkanUBO ubo = {};
 	
 	// Model matrix.
-	vec3 rotation_axis = {0.0f, 0.0f, 1.0f};
+	/*vec3 rotation_axis = {0.0f, 0.0f, 1.0f};
 	static float rotation_amount = M_PI_2;
 	rotation_amount += delta_time;
 	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
-	glm_rotate(ubo.model, rotation_amount, rotation_axis);
+	glm_rotate(ubo.model, rotation_amount, rotation_axis);*/
+	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
 	
 	// View matrix.
-	vec3 eyeball_position;
-	glm_vec3_copy(vk->camera->position[cameraID], eyeball_position);
-	vec3 center_position = {0.0f, 0.0f, 0.0f};
-	vec3 world_up = {0.0f, 0.0f, 1.0f};
-	glm_lookat(eyeball_position, center_position, world_up, ubo.view);
+	// vec3 world_up = {0.0f, 0.0f, 1.0f};
+	glm_lookat(vk->camera->position[cameraID], vk->camera->forward[cameraID], vk->camera->up[cameraID], ubo.view);
 	
 	// Projection matrix.
 	glm_mat4_copy(vk->camera->projection[cameraID], ubo.proj);

@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
 	wsCameraInit(&cm);
 	uint8_t camera_main = wsCameraCreate();
 	
-	// Create test triangle!
+	// Create meshes!
 	wsMeshInit(&md);
 	uint8_t triangle_meshID = wsMeshCreate();
 	
@@ -79,18 +79,7 @@ int main(int argc, char* argv[])
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
 		
-		vec3 pos = {2.0f, 2.0f, 2.0f};
-		vec4 rot = {0.0f, 0.0f, 0.0f, 0.0f};
-		mat4 proj;
-		
-		// Projection matrix.
-		float fov = 45.0f;
-		float near = 0.1f;
-		float far = 10.0f;
-		glm_perspective(fov, wsVulkanGetAspectRatio(), near, far, proj);
-		proj[1][1] *= -1;
-		
-		wsCameraUpdateUBOFields(camera_main, &pos, &rot, &proj);
+		wsCameraUpdateFPSCamera(camera_main);
 		
 		
 		// Logic step.
