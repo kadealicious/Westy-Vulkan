@@ -50,8 +50,9 @@ void wsCameraUpdateProjection(uint8_t cameraID)
 {
 	float near = 0.1f;
 	float far = 1000.0f;
-	glm_perspective(wsCameraGetFOV(cameraID), wsVulkanGetAspectRatio(), near, far, cm->projection[cameraID]);
+	glm_perspective(glm_rad(wsCameraGetFOV(cameraID)), wsVulkanGetAspectRatio(), near, far, cm->projection[cameraID]);
 	cm->projection[cameraID][1][1] *= -1;	// GLM was designed to work with OpenGL; Vulkan has a slightly differed coord. system (reversed y-axis I think).
+	// printf("FOV: rad: %f,  deg: %f\n", glm_rad(wsCameraGetFOV(cameraID)), wsCameraGetFOV(cameraID));
 }
 void wsCameraUpdateFPSCamera(uint8_t cameraID, float time_delta)
 {
@@ -100,7 +101,7 @@ void wsCameraUpdateFPSCamera(uint8_t cameraID, float time_delta)
 	glm_vec3_add(move_forward, cm->position[cameraID], cm->position[cameraID]);
 	// printf("cam pos: %f %f %f\n", cm->position[cameraID][0], cm->position[cameraID][1], cm->position[cameraID][2]);
 	
-	float fov_new = (wsInputGetMouseScroll() * 0.01f) + 45.0f;
+	float fov_new = (wsInputGetMouseScroll() * 0.5f) + 60.0f;
 	wsCameraSetFOV(cameraID, fov_new);
 }
 
