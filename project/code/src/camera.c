@@ -43,20 +43,24 @@ void wsCameraUpdateUBOFields(uint8_t cameraID, vec3* position, vec4* rotation, m
 }
 void wsCameraUpdateFPSCamera(uint8_t cameraID)
 {
-	vec3 camera_target;
-	glm_vec3_copy(cm->forward[cameraID], camera_target);
-	camera_target[0] += wsInputGetMouseMoveX();
-	printf("%f\n", wsInputGetMouseMoveX());	// TODO: Not workie!
+	float horizontal_angle = wsInputGetMousePosX();
+	float vertical_angle = wsInputGetMousePosY();
+	
+	vec3 camera_target = GLM_VEC3_ZERO_INIT;
+	camera_target[0] = cosf(vertical_angle) * sinf(horizontal_angle);
+	camera_target[1] = sinf(vertical_angle);
+	camera_target[2] = cosf(vertical_angle) * cosf(horizontal_angle);
 	glm_vec3_add(cm->position[cameraID], camera_target, cm->forward[cameraID]);
 	glm_vec3_normalize(cm->forward[cameraID]);
 	// printf("cam target: %f %f %f\n", camera_target[0], camera_target[1], camera_target[2]);
 	
-	cm->up[cameraID][0] = 0.0f;
-	cm->up[cameraID][1] = 1.0f;
-	cm->up[cameraID][2] = 0.0f;
-	glm_vec3_cross(cm->up[cameraID], cm->forward[cameraID], cm->right[cameraID]);
+	cm->right[cameraID][0] = sinf(horizontal_angle - M_PI_2);
+	cm->right[cameraID][1] = 0.0f;
+	cm->right[cameraID][2] = cosf(horizontal_angle - M_PI_2);
 	glm_vec3_normalize(cm->right[cameraID]);
 	// printf("cam rot: %f %f %f %f\n", cm->rotation[cameraID][0], cm->rotation[cameraID][1], cm->rotation[cameraID][2], cm->rotation[cameraID][3]);
+	
+	glm_vec3_cross(cm->forward[cameraID], cm->right[cameraID], cm->up[cameraID]);
 	
 	float keys_vertical = (wsInputGetKeyHold(GLFW_KEY_SPACE) - wsInputGetKeyHold(GLFW_KEY_LEFT_CONTROL)) * 0.01f;
 	float keys_horizontal = (wsInputGetKeyHold(GLFW_KEY_D) - wsInputGetKeyHold(GLFW_KEY_A)) * 0.01f;

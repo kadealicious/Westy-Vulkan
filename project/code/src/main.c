@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 	// Initialize GLFW.
 	uint8_t windowID = wsWindowInit(640, 480, &wnd);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
-	wsInputInit(windowID, 0.3f);	// Bind keyboard input to our GLFW window.
+	wsInputInit(windowID, 0.003f);	// Bind keyboard input to our GLFW window.
 	
 	// Initialize cameras!
 	wsCameraInit(&cm);
@@ -73,7 +73,8 @@ int main(int argc, char* argv[])
 		timespec_get(&time_info, TIME_UTC);
 		time_start = time_info.tv_nsec;
 		
-		wsInputUpdate();
+		// Poll input events through GLFW.
+		wsInputPreUpdate();
 		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE)) {
 			printf("INFO: User has requested window should close!\n");
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -102,6 +103,8 @@ int main(int argc, char* argv[])
 		time_end = time_info.tv_nsec;
 		time_delta = (time_end - time_start);
 		num_frames++;
+		
+		wsInputPostUpdate();
 	}
 	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	

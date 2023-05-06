@@ -6,7 +6,8 @@
 
 
 void wsInputInit(uint8_t windowID, float mouse_sensitivity);
-void wsInputUpdate();
+void wsInputPreUpdate();
+void wsInputPostUpdate();
 
 int wsInputGetKeyLast();
 bool wsInputGetKeyHold(int key);
