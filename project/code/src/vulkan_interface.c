@@ -241,7 +241,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_dat
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	
-	wsVulkanCreateTextureImage("textures/statue.jpg");
+	wsVulkanCreateTextureImage("textures/bobross.png");
 	wsVulkanCreateImageView(&vk->textureimage_view, &vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB);
 	wsVulkanCreateTextureSampler();
 	
