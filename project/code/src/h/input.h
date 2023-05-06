@@ -14,11 +14,13 @@ bool wsInputGetKeyHold(int key);
 bool wsInputGetKeyPress(int key);
 bool wsInputGetKeyRelease(int key);
 bool wsInputGetKeyReleaseOnce(int key);
+
 float wsInputGetMousePosX();
 float wsInputGetMousePosY();
 float wsInputGetMouseMoveX();
 float wsInputGetMouseMoveY();
 float wsInputGetMouseScroll();
+void wsInputResetMouseMove();
 
 void wsInputKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void wsInputCursorPosCallback(GLFWwindow* window, double posx, double posy);

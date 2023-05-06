@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 	// Initialize GLFW.
 	uint8_t windowID = wsWindowInit(640, 480, &wnd);
 	GLFWwindow* window = wsWindowGetPtr(windowID);
-	wsInputInit(windowID, 0.003f);	// Bind keyboard input to our GLFW window.
+	wsInputInit(windowID, 2.3f);	// Bind keyboard input to our GLFW window.
 	
 	// Initialize cameras!
 	wsCameraInit(&cm);
@@ -66,6 +66,8 @@ int main(int argc, char* argv[])
 	double time_delta_adj = 0;
 	uint16_t num_frames = 0;
 	
+	bool is_paused = false;
+	
 	while(!glfwWindowShouldClose(window))
 	{
 		// Pre-logic-step.
@@ -75,22 +77,45 @@ int main(int argc, char* argv[])
 		
 		// Poll input events through GLFW.
 		wsInputPreUpdate();
-		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE)) {
+		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE))
+		{
 			printf("INFO: User has requested window should close!\n");
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 		}
+		if(wsInputGetKeyReleaseOnce(GLFW_KEY_F1))
+		{
+			if(!is_paused)
+			{
+				printf("INFO: Westy paused!\n");
+				GLFWwindow* window_ptr = wsWindowGetPtr(windowID);
+				glfwSetInputMode(window_ptr, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+				glfwSetCursorPos(window_ptr, wsWindowGetWidth(windowID) / 2.0f, wsWindowGetHeight(windowID) / 2.0f);
+				wsInputResetMouseMove();
+			}
+			else
+			{
+				printf("INFO: Westy unpaused!\n");
+				GLFWwindow* window_ptr = wsWindowGetPtr(windowID);
+				glfwSetInputMode(window_ptr, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+				wsInputResetMouseMove();
+			}
+			is_paused = !is_paused;
+		}
 		
-		wsCameraUpdateFPSCamera(camera_main);
+		
 		
 		
 		// Logic step.
-		// Not workie; make crashy :(
-		/*md.vertices[0][0].color[0] = 1;
-		md.vertices[0][0].color[1] = 1;
-		md.vertices[0][0].color[2] = 1;*/
+		if(!is_paused)
+		{
+			wsCameraUpdateFPSCamera(camera_main);
+		}
+		
+		
 		
 		
 		// Post-logic step.
+		wsCameraUpdateProjection(camera_main);
 		wsVulkanDrawFrame(time_delta_adj, camera_main);
 		
 		if(DEBUG && time_delta < 0)

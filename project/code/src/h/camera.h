@@ -35,6 +35,7 @@ void wsCameraDestroy(uint8_t cameraID);	// Destroys 1 (one) single (specified) c
 void wsCameraStop();					// Destroys all cameras!
 
 void wsCameraUpdateUBOFields(uint8_t cameraID, vec3* position, vec4* rotation, mat4* projection);
+void wsCameraUpdateProjection(uint8_t cameraID);
 void wsCameraUpdateFPSCamera(uint8_t cameraID);
 
 float wsCameraGetFOV(uint8_t cameraID);

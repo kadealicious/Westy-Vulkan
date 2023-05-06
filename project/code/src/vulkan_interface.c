@@ -1022,8 +1022,9 @@ void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time, uint
 	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
 	
 	// View matrix.
-	vec3 world_up = {0.0f, 1.0f, 0.0f};
-	glm_lookat(vk->camera->position[cameraID], vk->camera->forward[cameraID], world_up, ubo.view);
+	vec3 camera_target = GLM_VEC3_ZERO_INIT;
+	glm_vec3_add(vk->camera->position[cameraID], vk->camera->forward[cameraID], camera_target);
+	glm_lookat(vk->camera->position[cameraID], camera_target, vk->camera->up[cameraID], ubo.view);
 	
 	// Projection matrix.
 	glm_mat4_copy(vk->camera->projection[cameraID], ubo.proj);

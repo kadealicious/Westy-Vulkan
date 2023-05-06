@@ -35,7 +35,7 @@ wsMouse mouse;
 
 void wsInputInit(uint8_t windowID, float mouse_sensitivity) {
 	input.windowID = windowID;
-    mouse.sensitivity = mouse_sensitivity;
+    mouse.sensitivity = (mouse_sensitivity / 1000.0f);
 	mouse.scroll = 0.0f;
 	mouse.first_move = true;
 	
@@ -76,13 +76,12 @@ float wsInputGetMousePosY()		{ return mouse.position[1]; }
 float wsInputGetMouseMoveX()	{ return mouse.movement[0]; }
 float wsInputGetMouseMoveY()	{ return mouse.movement[1]; }
 float wsInputGetMouseScroll()	{ return mouse.scroll; }
+void wsInputResetMouseMove()		{ mouse.movement[0] = 0.0f; mouse.movement[1] = 0.0f; }
 
 // Automatically calls glfwPollEvents().
 void wsInputPreUpdate()
 {
 	glfwPollEvents();
-	
-	
 }
 void wsInputPostUpdate()
 {
