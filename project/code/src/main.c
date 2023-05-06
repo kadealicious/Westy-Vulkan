@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
 		// Logic step.
 		if(!is_paused)
 		{
-			wsCameraUpdateFPSCamera(camera_main);
+			wsCameraUpdateFPSCamera(camera_main, time_delta_adj);
 		}
 		
 		

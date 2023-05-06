@@ -53,13 +53,13 @@ void wsCameraUpdateProjection(uint8_t cameraID)
 	glm_perspective(wsCameraGetFOV(cameraID), wsVulkanGetAspectRatio(), near, far, cm->projection[cameraID]);
 	cm->projection[cameraID][1][1] *= -1;	// GLM was designed to work with OpenGL; Vulkan has a slightly differed coord. system (reversed y-axis I think).
 }
-void wsCameraUpdateFPSCamera(uint8_t cameraID)
+void wsCameraUpdateFPSCamera(uint8_t cameraID, float time_delta)
 {
 	// Rotation angles.
 	static float yaw = -M_PI_2;
 	static float pitch = 0.0f;
-	yaw -= wsInputGetMouseMoveX();
-	pitch -= wsInputGetMouseMoveY();
+	yaw -= wsInputGetMouseMoveX() * time_delta;
+	pitch -= wsInputGetMouseMoveY() * time_delta;
 	vec2 pitch_limits = {(-M_PI_2 + 0.01f), (M_PI_2 - 0.01f)};
 	if(pitch > pitch_limits[1])
 		pitch = pitch_limits[1];
@@ -83,9 +83,9 @@ void wsCameraUpdateFPSCamera(uint8_t cameraID)
 	// printf("cam rot: %f %f %f %f\n", cm->rotation[cameraID][0], cm->rotation[cameraID][1], cm->rotation[cameraID][2], cm->rotation[cameraID][3]);
 	
 	// Calculate amounts to move on each axis based on keypresses.
-	float keys_vertical = -(wsInputGetKeyHold(GLFW_KEY_SPACE) - wsInputGetKeyHold(GLFW_KEY_LEFT_CONTROL)) * 0.001f;
-	float keys_horizontal = -(wsInputGetKeyHold(GLFW_KEY_D) - wsInputGetKeyHold(GLFW_KEY_A)) * 0.001f;
-	float keys_forward = (wsInputGetKeyHold(GLFW_KEY_W) - wsInputGetKeyHold(GLFW_KEY_S)) * 0.001f;
+	float keys_vertical = -(wsInputGetKeyHold(GLFW_KEY_SPACE) - wsInputGetKeyHold(GLFW_KEY_LEFT_CONTROL)) * time_delta;
+	float keys_horizontal = -(wsInputGetKeyHold(GLFW_KEY_D) - wsInputGetKeyHold(GLFW_KEY_A)) * time_delta;
+	float keys_forward = (wsInputGetKeyHold(GLFW_KEY_W) - wsInputGetKeyHold(GLFW_KEY_S)) * time_delta;
 	vec3 move_vertical;
 	vec3 move_horizontal;
 	vec3 move_forward;

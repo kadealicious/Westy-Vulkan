@@ -1014,12 +1014,11 @@ void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time, uint
 	wsVulkanUBO ubo = {};
 	
 	// Model matrix.
-	/*vec3 rotation_axis = {0.0f, 0.0f, 1.0f};
-	static float rotation_amount = M_PI_2;
+	vec3 rotation_axis = {0.0f, 0.0f, 1.0f};
+	static float rotation_amount = 0.0f;
 	rotation_amount += delta_time;
 	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
-	glm_rotate(ubo.model, rotation_amount, rotation_axis);*/
-	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
+	glm_rotate(ubo.model, sinf(rotation_amount), rotation_axis);
 	
 	// View matrix.
 	vec3 camera_target = GLM_VEC3_ZERO_INIT;

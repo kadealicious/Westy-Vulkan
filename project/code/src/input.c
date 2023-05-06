@@ -35,7 +35,7 @@ wsMouse mouse;
 
 void wsInputInit(uint8_t windowID, float mouse_sensitivity) {
 	input.windowID = windowID;
-    mouse.sensitivity = (mouse_sensitivity / 1000.0f);
+    mouse.sensitivity = (mouse_sensitivity / 25.0f);
 	mouse.scroll = 0.0f;
 	mouse.first_move = true;
 	
