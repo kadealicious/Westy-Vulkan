@@ -40,8 +40,8 @@ int main(int argc, char* argv[])
 	
 	// Initialize GLFW.
 	uint8_t windowID = wsWindowInit(640, 480, &wnd);
-	GLFWwindow* window = wsWindowGetPtr(windowID);
-	wsInputInit(windowID, 2.3f);	// Bind keyboard input to our GLFW window.
+	GLFWwindow* window_ptr = wsWindowGetPtr(windowID);
+	wsInputInit(windowID, 1.0f);					// Bind keyboard input to our GLFW window.
 	
 	// Initialize cameras!
 	wsCameraInit(&cm);
@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
 	
 	bool is_paused = false;
 	
-	while(!glfwWindowShouldClose(window))
+	while(!glfwWindowShouldClose(window_ptr))
 	{
 		// Pre-logic-step.
 		time_delta_adj = max(time_delta * 0.000000001, 0.0);
@@ -80,14 +80,13 @@ int main(int argc, char* argv[])
 		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE))
 		{
 			printf("INFO: User has requested window should close!\n");
-			glfwSetWindowShouldClose(window, GLFW_TRUE);
+			glfwSetWindowShouldClose(window_ptr, GLFW_TRUE);
 		}
 		if(wsInputGetKeyReleaseOnce(GLFW_KEY_F1))
 		{
 			if(!is_paused)
 			{
 				printf("INFO: Westy paused!\n");
-				GLFWwindow* window_ptr = wsWindowGetPtr(windowID);
 				glfwSetInputMode(window_ptr, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 				glfwSetCursorPos(window_ptr, wsWindowGetWidth(windowID) / 2.0f, wsWindowGetHeight(windowID) / 2.0f);
 				wsInputResetMouseMove();
@@ -95,7 +94,6 @@ int main(int argc, char* argv[])
 			else
 			{
 				printf("INFO: Westy unpaused!\n");
-				GLFWwindow* window_ptr = wsWindowGetPtr(windowID);
 				glfwSetInputMode(window_ptr, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 				wsInputResetMouseMove();
 			}

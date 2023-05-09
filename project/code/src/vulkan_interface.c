@@ -6,6 +6,7 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include<CGLM/cglm.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include"h/stb_image.h"
@@ -63,7 +64,12 @@ VkResult wsVulkanCreateCommandPool();		// Create command pool for queueing comma
 VkResult wsVulkanCreateCommandBuffers();	// Creates command buffer for holding commands.
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);		// Records commands into a buffer.
 
-VkResult wsVulkanCreateImageView();
+VkFormat wsVulkanFindDepthFormat();
+bool wsVulkanHasStencilComponent(VkFormat format);
+VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_candidates, VkImageTiling desired_tiling, VkFormatFeatureFlags desired_features);
+VkResult wsVulkanCreateDepthResources();	// Creates depth buffer image and associated resources.
+
+VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkFormat format, VkImageAspectFlags aspect_flags);
 VkResult wsVulkanCreateTextureSampler();
 VkResult wsVulkanCreateTextureImage();
 void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new);
@@ -192,7 +198,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_dat
 	app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
 	
 	app_info.pEngineName = "Westy Vulkan";
-	app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
+	app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);	// TODO: Use VK_MAKE_API_VERSION() instead?  Who knows!
 	
 	app_info.apiVersion = VK_API_VERSION_1_3;
 	app_info.pNext = NULL;
@@ -237,12 +243,13 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_dat
 	wsVulkanCreateRenderPass();
 	wsVulkanCreateDescriptorSetLayout();
 	wsVulkanCreateGraphicsPipeline();	// Graphics pipeline combines all created objects and information into one abstraction.
+	wsVulkanCreateDepthResources();		// Create depth buffer image and memory.
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	
 	wsVulkanCreateTextureImage("textures/bobross.png");
-	wsVulkanCreateImageView(&vk->textureimage_view, &vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB);
+	wsVulkanCreateImageView(&vk->textureimage_view, &vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 	wsVulkanCreateTextureSampler();
 	
 	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
@@ -477,9 +484,13 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	renderpass_info.renderArea.offset.x = 0;
 	renderpass_info.renderArea.offset.y = 0;
 	renderpass_info.renderArea.extent = vk->swapchain.extent;
+	
 	VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-	renderpass_info.clearValueCount = 1;
-	renderpass_info.pClearValues = &clear_color;
+	VkClearValue clear_depth = {{{1.0f, 0}}};
+	VkClearValue clear_values[2] = {clear_color, clear_depth};
+	renderpass_info.clearValueCount = 2;
+	renderpass_info.pClearValues = &clear_values[0];
+	
 	vkCmdBeginRenderPass(*commandbuffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 	
@@ -652,7 +663,7 @@ VkResult wsVulkanCreateTextureImage(const char* path)
 		
 	return result;
 }
-VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkFormat format)
+VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkFormat format, VkImageAspectFlags aspect_flags)
 {
 	VkImageViewCreateInfo view_info = {};
 	view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -665,7 +676,7 @@ VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkForm
 	view_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 	view_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 	// subresourceRange describes what the image's purpose is, as well as which part of the image we will be accessing.
-	view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	view_info.subresourceRange.aspectMask = aspect_flags;
 	view_info.subresourceRange.baseMipLevel = 0;
 	view_info.subresourceRange.levelCount = 1;
 	view_info.subresourceRange.baseArrayLayer = 0;
@@ -685,7 +696,16 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 	barrier_acquire.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrier_acquire.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrier_acquire.image = image;
-	barrier_acquire.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	
+	if(layout_new == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+	{
+		barrier_acquire.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		
+		if(wsVulkanHasStencilComponent(format))
+			{ barrier_acquire.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT; }
+	}
+	else barrier_acquire.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	
 	barrier_acquire.subresourceRange.baseMipLevel = 0;
 	barrier_acquire.subresourceRange.levelCount = 1;
 	barrier_acquire.subresourceRange.baseArrayLayer = 0;
@@ -706,7 +726,8 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		dest_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		
-	} else if(layout_old == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && layout_new == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+	}
+	else if(layout_old == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && layout_new == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 	{	/* If we are transferring to a shader-preferred layout AND our transfer queue is not the same as our graphics queue, 
 			then this case requires a release barrier from transfer queue family to graphics queue family. */
 		
@@ -734,7 +755,16 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 		
 		source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		dest_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	} else
+	}
+	else if(layout_old == VK_IMAGE_LAYOUT_UNDEFINED && layout_new == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+	{
+		barrier_acquire.srcAccessMask = 0;
+		barrier_acquire.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		dest_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+	}
+	else
 	{
 		printf("ERROR: Unsupported Vulkan image layout transition!\n");
 		printf("\tOld layout: %i, new layout: %i\n", layout_old, layout_new);
@@ -822,6 +852,54 @@ void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, u
 	vkCmdCopyBufferToImage(commandbuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 	
 	wsVulkanEndSingleTimeCommands(&commandbuffer, WS_VK_COMMAND_TRANSFER);
+}
+bool wsVulkanHasStencilComponent(VkFormat format)
+{
+	return (format == VK_FORMAT_D32_SFLOAT_S8_UINT) || (format == VK_FORMAT_D24_UNORM_S8_UINT);
+}
+VkFormat wsVulkanFindDepthFormat()
+{
+	VkFormat desired_formats[3] = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
+	return wsVulkanFindSupportedImageFormat(&desired_formats[0], 3, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+}
+VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_candidates, VkImageTiling desired_tiling, VkFormatFeatureFlags desired_features)
+{
+	VkFormat format;
+	
+	for(uint8_t i = 0; i < num_candidates; i++)
+	{
+		format = candidates[i];
+		
+		VkFormatProperties properties;
+		vkGetPhysicalDeviceFormatProperties(vk->physical_device, format, &properties);
+		
+		bool has_linear_features = (properties.linearTilingFeatures & desired_features) == desired_features;
+		bool has_optimal_features = (properties.optimalTilingFeatures & desired_features) == desired_features;
+		
+		if(desired_tiling == VK_IMAGE_TILING_LINEAR && has_linear_features)
+		{
+			wsVulkanPrintQuiet("supported linear image format search", format, WS_VK_NULL, WS_VK_NULL, VK_SUCCESS);
+			return format;
+		}
+		else if(desired_tiling == VK_IMAGE_TILING_OPTIMAL && has_optimal_features)
+		{
+			wsVulkanPrintQuiet("supported optimal image format search", format, WS_VK_NULL, WS_VK_NULL, VK_SUCCESS);
+			return format;
+		}
+	}
+	
+	printf("WARNING: Vulkan supported image format search failed; using last format in candidate list %i!\n", format);
+	return format;
+}
+VkResult wsVulkanCreateDepthResources()
+{
+	VkFormat depth_format = wsVulkanFindDepthFormat();
+	VkResult result = wsVulkanCreateImage(vk->swapchain.extent.width, vk->swapchain.extent.height, depth_format, VK_IMAGE_TILING_OPTIMAL, 
+											VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->depthimage, 
+											&vk->depthimage_memory);
+	result = wsVulkanCreateImageView(&vk->depthimage_view, &vk->depthimage, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
+	
+	return result;
 }
 
 VkResult wsVulkanBeginSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype)
@@ -1124,12 +1202,12 @@ VkResult wsVulkanCreateFrameBuffers()
 	vk->swapchain.framebuffers = malloc(vk->swapchain.num_images * sizeof(VkFramebuffer));
 	
 	for(int i = 0; i < vk->swapchain.num_images; i++) {
-		VkImageView attachments[] = {vk->swapchain.image_views[i]};
+		VkImageView attachments[2] = {vk->swapchain.image_views[i], vk->depthimage_view};
 		
 		VkFramebufferCreateInfo framebuffer_info = {};
 		framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebuffer_info.renderPass = vk->renderpass;
-		framebuffer_info.attachmentCount = 1;
+		framebuffer_info.attachmentCount = 2;
 		framebuffer_info.pAttachments = attachments;
 		framebuffer_info.width = vk->swapchain.extent.width;
 		framebuffer_info.height = vk->swapchain.extent.height;
@@ -1157,23 +1235,40 @@ VkResult wsVulkanCreateRenderPass() {
 	color_attachment.stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	color_attachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
 	color_attachment.finalLayout	= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	
-	
-	// Specify attachment reference for subpass(es).
 	VkAttachmentReference colorattachment_reference = {};
 	colorattachment_reference.attachment= 0;
 	colorattachment_reference.layout	= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	
+	// Everybody likes depth buffering!
+	VkAttachmentDescription depth_attachment = {};
+	depth_attachment.format = wsVulkanFindDepthFormat();
+	depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	depth_attachment.loadOp	= VK_ATTACHMENT_LOAD_OP_CLEAR;
+	depth_attachment.storeOp= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depth_attachment.stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	depth_attachment.stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depth_attachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
+	depth_attachment.finalLayout	= VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	VkAttachmentReference depthattachment_reference = {};
+	depthattachment_reference.attachment = 1;
+	depthattachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	
+	
+	// Subpass time B-)
 	VkSubpassDescription subpass_desc = {};
 	subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	subpass_desc.colorAttachmentCount = 1;
 	subpass_desc.pColorAttachments = &colorattachment_reference;
+	subpass_desc.pDepthStencilAttachment = &depthattachment_reference;
+	
 	
 	
 	// Create render pass!
 	VkRenderPassCreateInfo renderpass_info = {};
 	renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderpass_info.attachmentCount = 1;
-	renderpass_info.pAttachments = &color_attachment;
+	renderpass_info.attachmentCount = 2;
+	VkAttachmentDescription attachments[2] = {color_attachment, depth_attachment};
+	renderpass_info.pAttachments = &attachments[0];
 	renderpass_info.subpassCount= 1;
 	renderpass_info.pSubpasses	= &subpass_desc;
 	
@@ -1182,10 +1277,10 @@ VkResult wsVulkanCreateRenderPass() {
 	VkSubpassDependency dependency = {};
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency.dstSubpass = 0;
-	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 	dependency.srcAccessMask = 0;
-	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 	renderpass_info.dependencyCount = 1;
 	renderpass_info.pDependencies = &dependency;
 	
@@ -1382,6 +1477,19 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	colorblend_info.blendConstants[3] = 0.0f;
 	
 	
+	VkPipelineDepthStencilStateCreateInfo depthstencil_info = {};
+	depthstencil_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthstencil_info.depthTestEnable = VK_TRUE;
+	depthstencil_info.depthWriteEnable = VK_TRUE;
+	depthstencil_info.depthCompareOp = VK_COMPARE_OP_LESS;
+	depthstencil_info.depthBoundsTestEnable = VK_FALSE;
+	depthstencil_info.minDepthBounds = 0.0f;
+	depthstencil_info.maxDepthBounds = 1.0f;
+	depthstencil_info.stencilTestEnable = VK_FALSE;
+	// depthstencil_info.front = {};
+	// depthstencil_info.back = {};
+	
+	
 	// ---------------------
 	// CREATE PIPELINE & LAYOUT.
 	// ---------------------
@@ -1415,6 +1523,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	pipeline_info.pDepthStencilState = NULL;
 	pipeline_info.pColorBlendState = &colorblend_info;
 	pipeline_info.pDynamicState = &dynamicstate_info;
+	pipeline_info.pDepthStencilState = &depthstencil_info;
 	
 	// Set layout.
 	pipeline_info.layout = vk->pipeline_layout;
@@ -1447,7 +1556,7 @@ uint32_t wsVulkanCreateImageViews() {
 	// Create image view for each swap chain image.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++)
 	{
-		VkResult result = wsVulkanCreateImageView(&vk->swapchain.image_views[i], &vk->swapchain.images[i], vk->swapchain.image_format);
+		VkResult result = wsVulkanCreateImageView(&vk->swapchain.image_views[i], &vk->swapchain.images[i], vk->swapchain.image_format, VK_IMAGE_ASPECT_COLOR_BIT);
 		if(result == VK_SUCCESS)
 			num_created++;
 	}
@@ -1483,12 +1592,14 @@ VkResult wsVulkanCreateSwapChain() {
 	
 	
 	// Check if queue family indices are unique.
-	if(vk->queues.num_unique_queue_families > 1) {
+	if(vk->queues.num_unique_queue_families > 1)
+	{
 		create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		create_info.queueFamilyIndexCount = vk->queues.num_unique_queue_families;
 		create_info.pQueueFamilyIndices = &vk->queues.unique_queue_family_indices[0];
-	
-	} else {
+	}
+	else
+	{
 		create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		create_info.queueFamilyIndexCount = 0;	// Optional.
 		create_info.pQueueFamilyIndices = NULL;	// Optional.
@@ -1518,12 +1629,14 @@ VkResult wsVulkanCreateSwapChain() {
 	wsVulkanPrint("swap chain creation", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	return result;
 }
-void wsVulkanRecreateSwapChain() {
+void wsVulkanRecreateSwapChain()
+{
 	
 	// If window is minimized, pause events and wait for something to draw to again!
 	int32_t width = 0, height = 0;
 	glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
-	while(width == 0 || height == 0) {
+	while(width == 0 || height == 0)
+	{
 		glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
 		glfwWaitEvents();
 	}
@@ -1538,16 +1651,23 @@ void wsVulkanRecreateSwapChain() {
 	// Recreate the swap chain and its derivative components.
 	wsVulkanCreateSwapChain();
 	wsVulkanCreateImageViews();
+	wsVulkanCreateDepthResources();
 	wsVulkanCreateFrameBuffers();
 }
-void wsVulkanDestroySwapChain() {
-	
+void wsVulkanDestroySwapChain()
+{
 	// Destroy individual framebuffers within swapchain.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {
 		vkDestroyFramebuffer(vk->logical_device, vk->swapchain.framebuffers[i], NULL);
 	}
 	free(vk->swapchain.framebuffers);
 	printf("INFO: Vulkan framebuffers destroyed!\n");
+	
+	// Destroy depth buffer.
+	vkDestroyImageView(vk->logical_device, vk->depthimage_view, NULL);
+	vkDestroyImage(vk->logical_device, vk->depthimage, NULL);
+	vkFreeMemory(vk->logical_device, vk->depthimage_memory, NULL);
+	printf("INFO: Vulkan depth buffer destroyed!\n");
 	
 	// Destroy swap chain image views.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++) {

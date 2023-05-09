@@ -84,9 +84,10 @@ void wsCameraUpdateFPSCamera(uint8_t cameraID, float time_delta)
 	// printf("cam rot: %f %f %f %f\n", cm->rotation[cameraID][0], cm->rotation[cameraID][1], cm->rotation[cameraID][2], cm->rotation[cameraID][3]);
 	
 	// Calculate amounts to move on each axis based on keypresses.
-	float keys_vertical = -(wsInputGetKeyHold(GLFW_KEY_SPACE) - wsInputGetKeyHold(GLFW_KEY_LEFT_CONTROL)) * time_delta;
-	float keys_horizontal = -(wsInputGetKeyHold(GLFW_KEY_D) - wsInputGetKeyHold(GLFW_KEY_A)) * time_delta;
-	float keys_forward = (wsInputGetKeyHold(GLFW_KEY_W) - wsInputGetKeyHold(GLFW_KEY_S)) * time_delta;
+	float move_speed = 2.0f;
+	float keys_vertical = -(wsInputGetKeyHold(GLFW_KEY_SPACE) - wsInputGetKeyHold(GLFW_KEY_LEFT_CONTROL)) * time_delta * move_speed;
+	float keys_horizontal = -(wsInputGetKeyHold(GLFW_KEY_D) - wsInputGetKeyHold(GLFW_KEY_A)) * time_delta * move_speed;
+	float keys_forward = (wsInputGetKeyHold(GLFW_KEY_W) - wsInputGetKeyHold(GLFW_KEY_S)) * time_delta * move_speed;
 	vec3 move_vertical;
 	vec3 move_horizontal;
 	vec3 move_forward;

@@ -98,6 +98,10 @@ typedef struct wsVulkan
 	VkDeviceMemory textureimage_memory;
 	VkImageView textureimage_view;
 	
+	VkImage depthimage;					// Used for depth buffering in the fragment shader stage.
+	VkDeviceMemory depthimage_memory;
+	VkImageView depthimage_view;
+	
 	VkSampler texturesampler;	// Texture sampler!
 	
 	wsMesh* meshbuffer;					// Contains all raw vertex/index data.

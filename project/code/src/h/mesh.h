@@ -11,7 +11,7 @@
 
 typedef struct wsVertex
 {
-    vec2 position;
+    vec3 position;
     vec3 color;
 	vec2 texcoord;
     

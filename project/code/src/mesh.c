@@ -56,11 +56,12 @@ uint8_t wsMeshCreate()
 	
 	
     // Load vertices.
-    md->num_vertices[meshID] = 4;
+    md->num_vertices[meshID] = 8;
     md->vertices[meshID] = (wsVertex*)malloc(md->num_vertices[meshID] * sizeof(wsVertex));
 	
 	md->vertices[meshID][0].position[0] = -0.5f;
 	md->vertices[meshID][0].position[1] = -0.5f;
+	md->vertices[meshID][0].position[2] = 0.0f;
 	md->vertices[meshID][0].color[0] = 1.0f;
 	md->vertices[meshID][0].color[1] = 0.0f;
 	md->vertices[meshID][0].color[2] = 0.0f;
@@ -69,6 +70,7 @@ uint8_t wsMeshCreate()
     
 	md->vertices[meshID][1].position[0] = 0.5f;
 	md->vertices[meshID][1].position[1] = -0.5f;
+	md->vertices[meshID][1].position[2] = 0.0f;
 	md->vertices[meshID][1].color[0] = 0.0f;
 	md->vertices[meshID][1].color[1] = 1.0f;
 	md->vertices[meshID][1].color[2] = 0.0f;
@@ -77,6 +79,7 @@ uint8_t wsMeshCreate()
 	
 	md->vertices[meshID][2].position[0] = 0.5f;
 	md->vertices[meshID][2].position[1] = 0.5f;
+	md->vertices[meshID][2].position[2] = 0.0f;
 	md->vertices[meshID][2].color[0] = 0.0f;
 	md->vertices[meshID][2].color[1] = 0.0f;
 	md->vertices[meshID][2].color[2] = 1.0f;
@@ -85,6 +88,7 @@ uint8_t wsMeshCreate()
 	
 	md->vertices[meshID][3].position[0] = -0.5f;
 	md->vertices[meshID][3].position[1] = 0.5f;
+	md->vertices[meshID][3].position[2] = 0.0f;
 	md->vertices[meshID][3].color[0] = 1.0f;
 	md->vertices[meshID][3].color[1] = 1.0f;
 	md->vertices[meshID][3].color[2] = 1.0f;
@@ -92,8 +96,46 @@ uint8_t wsMeshCreate()
 	md->vertices[meshID][3].texcoord[1] = 1.0f;
 	
 	
+	// Lol
+	md->vertices[meshID][4].position[0] = -0.5f;
+	md->vertices[meshID][4].position[1] = -0.5f;
+	md->vertices[meshID][4].position[2] = -0.5f;
+	md->vertices[meshID][4].color[0] = 1.0f;
+	md->vertices[meshID][4].color[1] = 0.0f;
+	md->vertices[meshID][4].color[2] = 0.0f;
+	md->vertices[meshID][4].texcoord[0] = 1.0f;
+	md->vertices[meshID][4].texcoord[1] = 0.0f;
+    
+	md->vertices[meshID][5].position[0] = 0.5f;
+	md->vertices[meshID][5].position[1] = -0.5f;
+	md->vertices[meshID][5].position[2] = -0.5f;
+	md->vertices[meshID][5].color[0] = 0.0f;
+	md->vertices[meshID][5].color[1] = 1.0f;
+	md->vertices[meshID][5].color[2] = 0.0f;
+	md->vertices[meshID][5].texcoord[0] = 0.0f;
+	md->vertices[meshID][5].texcoord[1] = 0.0f;
+	
+	md->vertices[meshID][6].position[0] = 0.5f;
+	md->vertices[meshID][6].position[1] = 0.5f;
+	md->vertices[meshID][6].position[2] = -0.5f;
+	md->vertices[meshID][6].color[0] = 0.0f;
+	md->vertices[meshID][6].color[1] = 0.0f;
+	md->vertices[meshID][6].color[2] = 1.0f;
+	md->vertices[meshID][6].texcoord[0] = 0.0f;
+	md->vertices[meshID][6].texcoord[1] = 1.0f;
+	
+	md->vertices[meshID][7].position[0] = -0.5f;
+	md->vertices[meshID][7].position[1] = 0.5f;
+	md->vertices[meshID][7].position[2] = -0.5f;
+	md->vertices[meshID][7].color[0] = 1.0f;
+	md->vertices[meshID][7].color[1] = 1.0f;
+	md->vertices[meshID][7].color[2] = 1.0f;
+	md->vertices[meshID][7].texcoord[0] = 1.0f;
+	md->vertices[meshID][7].texcoord[1] = 1.0f;
+	
+	
 	// Load indices.  Jesus Christ.
-	md->num_indices[meshID] = 6;
+	md->num_indices[meshID] = 12;
 	md->indices[meshID] = (uint16_t*)malloc(md->num_indices[meshID] * sizeof(uint16_t));
 	
 	md->indices[meshID][0] = 0;
@@ -102,6 +144,14 @@ uint8_t wsMeshCreate()
 	md->indices[meshID][3] = 2;
 	md->indices[meshID][4] = 3;
 	md->indices[meshID][5] = 0;
+	
+	// oMg
+	md->indices[meshID][6] = 4;
+	md->indices[meshID][7] = 5;
+	md->indices[meshID][8] = 6;
+	md->indices[meshID][9] = 6;
+	md->indices[meshID][10] = 7;
+	md->indices[meshID][11] = 4;
 	
 	
     // Configure vertex binding descriptions, then the more fundamental attribute descriptions.
@@ -245,7 +295,7 @@ void wsMeshSetAttributeDescriptions(uint8_t meshID) {
     
     md->attribute_descs[meshID][0].binding = 0;
     md->attribute_descs[meshID][0].location = 0;
-    md->attribute_descs[meshID][0].format = VK_FORMAT_R32G32_SFLOAT;
+    md->attribute_descs[meshID][0].format = VK_FORMAT_R32G32B32_SFLOAT;
     md->attribute_descs[meshID][0].offset = offsetof(wsVertex, position);
 	
     md->attribute_descs[meshID][1].binding = 0;
