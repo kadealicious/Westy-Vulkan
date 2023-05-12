@@ -3,11 +3,6 @@
 #include<time.h>
 #include<stdlib.h>
 
-#define CGLM_FORCE_RADIANS
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include<CGLM/vec4.h>
-#include<CGLM/mat4.h>
-
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -49,7 +44,6 @@ int main(int argc, char* argv[])
 	
 	// Create meshes!
 	wsMeshInit(&md);
-	uint8_t triangle_meshID = wsMeshCreate();
 	
 	// Initialize Vulkan.
 	wsVulkanSetDebug(DEBUG);

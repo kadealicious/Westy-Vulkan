@@ -1,12 +1,17 @@
 #include<stdio.h>
 #include<stdint.h>
+
+#define CGLTF_IMPLEMENTATION
+#include"h/cgltf.h"
+
 #include"h/mesh.h"
 
 
 // Contains all data for transfer to shaders for all meshes!
 wsMesh* md;
 
-uint8_t wsMeshCreate();
+
+uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_t tex_width, const uint32_t tex_height);
 void wsMeshCopyData(uint8_t destID, uint8_t srcID);
 void wsMeshMoveData(uint8_t destID, uint8_t srcID);
 void wsMeshSetMap(uint8_t destID, uint8_t srcID);
@@ -26,6 +31,8 @@ void wsMeshInit(wsMesh* mesh_data) {
     
     md = mesh_data;
 	md->num_active_meshes = 0;
+	
+	uint8_t vikingroom_meshID = wsMeshCreate("models/blender_vikingroom.glb", "textures/vikingroom.png", 800, 600);
     
     printf("INFO: Meshes initialized!\n");
 }
@@ -36,7 +43,7 @@ void wsMeshStop()
     printf("INFO: Meshes destroyed!\n");
 }
 
-uint8_t wsMeshCreate()
+uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_t tex_width, const uint32_t tex_height)
 {
 	// Find a vacant meshID to use!
     uint8_t meshID = (WS_MESH_MAX_MESHES+1);
@@ -54,104 +61,122 @@ uint8_t wsMeshCreate()
 		return 0;
 	}
 	
+	// Load model from path.
+	cgltf_options options = {0};
+	cgltf_data* data = NULL;
+	cgltf_result result = cgltf_parse_file(&options, "models/blender_vikingroom.glb", &data);
+	if(result == cgltf_result_success)
+	{
+		printf("INFO: Mesh \"%s\" loaded successfully!\n", model_path);
+		cgltf_free(data);
+	}
+	else
+	{
+		printf("INFO: Mesh \"%s\" load failed w/ error code %i!\n", model_path, result);
+	}
 	
-    // Load vertices.
-    md->num_vertices[meshID] = 8;
-    md->vertices[meshID] = (wsVertex*)malloc(md->num_vertices[meshID] * sizeof(wsVertex));
-	
-	md->vertices[meshID][0].position[0] = -0.5f;
-	md->vertices[meshID][0].position[1] = -0.5f;
-	md->vertices[meshID][0].position[2] = 0.0f;
-	md->vertices[meshID][0].color[0] = 1.0f;
-	md->vertices[meshID][0].color[1] = 0.0f;
-	md->vertices[meshID][0].color[2] = 0.0f;
-	md->vertices[meshID][0].texcoord[0] = 1.0f;
-	md->vertices[meshID][0].texcoord[1] = 0.0f;
-    
-	md->vertices[meshID][1].position[0] = 0.5f;
-	md->vertices[meshID][1].position[1] = -0.5f;
-	md->vertices[meshID][1].position[2] = 0.0f;
-	md->vertices[meshID][1].color[0] = 0.0f;
-	md->vertices[meshID][1].color[1] = 1.0f;
-	md->vertices[meshID][1].color[2] = 0.0f;
-	md->vertices[meshID][1].texcoord[0] = 0.0f;
-	md->vertices[meshID][1].texcoord[1] = 0.0f;
-	
-	md->vertices[meshID][2].position[0] = 0.5f;
-	md->vertices[meshID][2].position[1] = 0.5f;
-	md->vertices[meshID][2].position[2] = 0.0f;
-	md->vertices[meshID][2].color[0] = 0.0f;
-	md->vertices[meshID][2].color[1] = 0.0f;
-	md->vertices[meshID][2].color[2] = 1.0f;
-	md->vertices[meshID][2].texcoord[0] = 0.0f;
-	md->vertices[meshID][2].texcoord[1] = 1.0f;
-	
-	md->vertices[meshID][3].position[0] = -0.5f;
-	md->vertices[meshID][3].position[1] = 0.5f;
-	md->vertices[meshID][3].position[2] = 0.0f;
-	md->vertices[meshID][3].color[0] = 1.0f;
-	md->vertices[meshID][3].color[1] = 1.0f;
-	md->vertices[meshID][3].color[2] = 1.0f;
-	md->vertices[meshID][3].texcoord[0] = 1.0f;
-	md->vertices[meshID][3].texcoord[1] = 1.0f;
-	
-	
-	// Lol
-	md->vertices[meshID][4].position[0] = -0.5f;
-	md->vertices[meshID][4].position[1] = -0.5f;
-	md->vertices[meshID][4].position[2] = -0.5f;
-	md->vertices[meshID][4].color[0] = 1.0f;
-	md->vertices[meshID][4].color[1] = 0.0f;
-	md->vertices[meshID][4].color[2] = 0.0f;
-	md->vertices[meshID][4].texcoord[0] = 1.0f;
-	md->vertices[meshID][4].texcoord[1] = 0.0f;
-    
-	md->vertices[meshID][5].position[0] = 0.5f;
-	md->vertices[meshID][5].position[1] = -0.5f;
-	md->vertices[meshID][5].position[2] = -0.5f;
-	md->vertices[meshID][5].color[0] = 0.0f;
-	md->vertices[meshID][5].color[1] = 1.0f;
-	md->vertices[meshID][5].color[2] = 0.0f;
-	md->vertices[meshID][5].texcoord[0] = 0.0f;
-	md->vertices[meshID][5].texcoord[1] = 0.0f;
-	
-	md->vertices[meshID][6].position[0] = 0.5f;
-	md->vertices[meshID][6].position[1] = 0.5f;
-	md->vertices[meshID][6].position[2] = -0.5f;
-	md->vertices[meshID][6].color[0] = 0.0f;
-	md->vertices[meshID][6].color[1] = 0.0f;
-	md->vertices[meshID][6].color[2] = 1.0f;
-	md->vertices[meshID][6].texcoord[0] = 0.0f;
-	md->vertices[meshID][6].texcoord[1] = 1.0f;
-	
-	md->vertices[meshID][7].position[0] = -0.5f;
-	md->vertices[meshID][7].position[1] = 0.5f;
-	md->vertices[meshID][7].position[2] = -0.5f;
-	md->vertices[meshID][7].color[0] = 1.0f;
-	md->vertices[meshID][7].color[1] = 1.0f;
-	md->vertices[meshID][7].color[2] = 1.0f;
-	md->vertices[meshID][7].texcoord[0] = 1.0f;
-	md->vertices[meshID][7].texcoord[1] = 1.0f;
-	
-	
-	// Load indices.  Jesus Christ.
-	md->num_indices[meshID] = 12;
-	md->indices[meshID] = (uint16_t*)malloc(md->num_indices[meshID] * sizeof(uint16_t));
-	
-	md->indices[meshID][0] = 0;
-	md->indices[meshID][1] = 1;
-	md->indices[meshID][2] = 2;
-	md->indices[meshID][3] = 2;
-	md->indices[meshID][4] = 3;
-	md->indices[meshID][5] = 0;
-	
-	// oMg
-	md->indices[meshID][6] = 4;
-	md->indices[meshID][7] = 5;
-	md->indices[meshID][8] = 6;
-	md->indices[meshID][9] = 6;
-	md->indices[meshID][10] = 7;
-	md->indices[meshID][11] = 4;
+	// Don't look at this.  Ever.
+	bool is_retarded = true;
+	if(is_retarded)
+	{
+		// Load vertices.
+		md->num_vertices[meshID] = 8;
+		md->vertices[meshID] = (wsVertex*)malloc(md->num_vertices[meshID] * sizeof(wsVertex));
+		
+		md->vertices[meshID][0].position[0] = -0.5f;
+		md->vertices[meshID][0].position[1] = -0.5f;
+		md->vertices[meshID][0].position[2] = 0.0f;
+		md->vertices[meshID][0].color[0] = 1.0f;
+		md->vertices[meshID][0].color[1] = 0.0f;
+		md->vertices[meshID][0].color[2] = 0.0f;
+		md->vertices[meshID][0].texcoord[0] = 1.0f;
+		md->vertices[meshID][0].texcoord[1] = 0.0f;
+		
+		md->vertices[meshID][1].position[0] = 0.5f;
+		md->vertices[meshID][1].position[1] = -0.5f;
+		md->vertices[meshID][1].position[2] = 0.0f;
+		md->vertices[meshID][1].color[0] = 0.0f;
+		md->vertices[meshID][1].color[1] = 1.0f;
+		md->vertices[meshID][1].color[2] = 0.0f;
+		md->vertices[meshID][1].texcoord[0] = 0.0f;
+		md->vertices[meshID][1].texcoord[1] = 0.0f;
+		
+		md->vertices[meshID][2].position[0] = 0.5f;
+		md->vertices[meshID][2].position[1] = 0.5f;
+		md->vertices[meshID][2].position[2] = 0.0f;
+		md->vertices[meshID][2].color[0] = 0.0f;
+		md->vertices[meshID][2].color[1] = 0.0f;
+		md->vertices[meshID][2].color[2] = 1.0f;
+		md->vertices[meshID][2].texcoord[0] = 0.0f;
+		md->vertices[meshID][2].texcoord[1] = 1.0f;
+		
+		md->vertices[meshID][3].position[0] = -0.5f;
+		md->vertices[meshID][3].position[1] = 0.5f;
+		md->vertices[meshID][3].position[2] = 0.0f;
+		md->vertices[meshID][3].color[0] = 1.0f;
+		md->vertices[meshID][3].color[1] = 1.0f;
+		md->vertices[meshID][3].color[2] = 1.0f;
+		md->vertices[meshID][3].texcoord[0] = 1.0f;
+		md->vertices[meshID][3].texcoord[1] = 1.0f;
+		
+		
+		// Lol
+		md->vertices[meshID][4].position[0] = -0.5f;
+		md->vertices[meshID][4].position[1] = -0.5f;
+		md->vertices[meshID][4].position[2] = -0.5f;
+		md->vertices[meshID][4].color[0] = 1.0f;
+		md->vertices[meshID][4].color[1] = 0.0f;
+		md->vertices[meshID][4].color[2] = 0.0f;
+		md->vertices[meshID][4].texcoord[0] = 1.0f;
+		md->vertices[meshID][4].texcoord[1] = 0.0f;
+		
+		md->vertices[meshID][5].position[0] = 0.5f;
+		md->vertices[meshID][5].position[1] = -0.5f;
+		md->vertices[meshID][5].position[2] = -0.5f;
+		md->vertices[meshID][5].color[0] = 0.0f;
+		md->vertices[meshID][5].color[1] = 1.0f;
+		md->vertices[meshID][5].color[2] = 0.0f;
+		md->vertices[meshID][5].texcoord[0] = 0.0f;
+		md->vertices[meshID][5].texcoord[1] = 0.0f;
+		
+		md->vertices[meshID][6].position[0] = 0.5f;
+		md->vertices[meshID][6].position[1] = 0.5f;
+		md->vertices[meshID][6].position[2] = -0.5f;
+		md->vertices[meshID][6].color[0] = 0.0f;
+		md->vertices[meshID][6].color[1] = 0.0f;
+		md->vertices[meshID][6].color[2] = 1.0f;
+		md->vertices[meshID][6].texcoord[0] = 0.0f;
+		md->vertices[meshID][6].texcoord[1] = 1.0f;
+		
+		md->vertices[meshID][7].position[0] = -0.5f;
+		md->vertices[meshID][7].position[1] = 0.5f;
+		md->vertices[meshID][7].position[2] = -0.5f;
+		md->vertices[meshID][7].color[0] = 1.0f;
+		md->vertices[meshID][7].color[1] = 1.0f;
+		md->vertices[meshID][7].color[2] = 1.0f;
+		md->vertices[meshID][7].texcoord[0] = 1.0f;
+		md->vertices[meshID][7].texcoord[1] = 1.0f;
+		
+		
+		// Load indices.  Jesus Christ.
+		md->num_indices[meshID] = 12;
+		md->indices[meshID] = (uint16_t*)malloc(md->num_indices[meshID] * sizeof(uint16_t));
+		
+		md->indices[meshID][0] = 0;
+		md->indices[meshID][1] = 1;
+		md->indices[meshID][2] = 2;
+		md->indices[meshID][3] = 2;
+		md->indices[meshID][4] = 3;
+		md->indices[meshID][5] = 0;
+		
+		// oMg
+		md->indices[meshID][6] = 4;
+		md->indices[meshID][7] = 5;
+		md->indices[meshID][8] = 6;
+		md->indices[meshID][9] = 6;
+		md->indices[meshID][10] = 7;
+		md->indices[meshID][11] = 4;
+	}
 	
 	
     // Configure vertex binding descriptions, then the more fundamental attribute descriptions.
