@@ -44,6 +44,7 @@ int main(int argc, char* argv[])
 	
 	// Create meshes!
 	wsMeshInit(&md);
+	uint8_t vikingroom_meshID = wsMeshCreate("models/blender_vikingroom.glb", "textures/vikingroom.png", 800, 600);
 	
 	// Initialize Vulkan.
 	wsVulkanSetDebug(DEBUG);

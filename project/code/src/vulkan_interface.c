@@ -69,9 +69,9 @@ bool wsVulkanHasStencilComponent(VkFormat format);
 VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_candidates, VkImageTiling desired_tiling, VkFormatFeatureFlags desired_features);
 VkResult wsVulkanCreateDepthResources();	// Creates depth buffer image and associated resources.
 
-VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkFormat format, VkImageAspectFlags aspect_flags);
+VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags);
 VkResult wsVulkanCreateTextureSampler();
-VkResult wsVulkanCreateTextureImage();
+VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path);
 void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new);
 void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
@@ -248,8 +248,9 @@ void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_dat
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	
-	wsVulkanCreateTextureImage("textures/bobross.png");
-	wsVulkanCreateImageView(&vk->textureimage_view, &vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+	// TODO: Make it so that these functions choose your texture image index for you and return it for storage elsewhere.
+	wsVulkanCreateTextureImage(&vk->teximg_image, &vk->teximg_memory, "textures/bobross.png");
+	wsVulkanCreateImageView(&vk->teximg_image, &vk->teximg_view, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 	wsVulkanCreateTextureSampler();
 	
 	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
@@ -404,9 +405,9 @@ void wsVulkanStop()
 	
 	vkDestroySampler(vk->logical_device, vk->texturesampler, NULL);			printf("INFO: Vulkan texture sampler destroyed!\n");
 	
-	vkDestroyImageView(vk->logical_device, vk->textureimage_view, NULL);	printf("INFO: Vulkan image view destroyed!\n");
-	vkDestroyImage(vk->logical_device, vk->textureimage, NULL);				printf("INFO: Vulkan image destroyed!\n");
-	vkFreeMemory(vk->logical_device, vk->textureimage_memory, NULL);		printf("INFO: Vulkan image memory destroyed!\n");
+	vkDestroyImageView(vk->logical_device, vk->teximg_view, NULL);	printf("INFO: Vulkan image view destroyed!\n");
+	vkDestroyImage(vk->logical_device, vk->teximg_image, NULL);				printf("INFO: Vulkan image destroyed!\n");
+	vkFreeMemory(vk->logical_device, vk->teximg_memory, NULL);		printf("INFO: Vulkan image memory destroyed!\n");
 	
 	// Free UBO, vertex, & index buffer memory.
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
@@ -622,7 +623,7 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, V
 	result = vkBindImageMemory(vk->logical_device, *image, *image_memory, 0);
 	return result;
 }
-VkResult wsVulkanCreateTextureImage(const char* path)
+VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path)
 {
 	// First, load the image using stb_image.h.
 	int tex_width;
@@ -649,13 +650,13 @@ VkResult wsVulkanCreateTextureImage(const char* path)
 	stbi_image_free(pixel_data);
 	
 	// Create the image!
-	VkResult result = wsVulkanCreateImage(tex_width, tex_height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->textureimage, &vk->textureimage_memory);
+	VkResult result = wsVulkanCreateImage(tex_width, tex_height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tex_image, image_memory);
 	wsVulkanPrint("image memory binding", WS_VK_NULL, WS_VK_NULL, WS_VK_NULL, result);
 	
 	// Copy our staging buffer to a GPU/shader-suitable VkImage format.
-	wsVulkanTransitionImageLayout(vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	wsVulkanCopyBufferToImage(stagingbuffer, vk->textureimage, (uint32_t)tex_width, (uint32_t)tex_height);
-	wsVulkanTransitionImageLayout(vk->textureimage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	wsVulkanTransitionImageLayout(*tex_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	wsVulkanCopyBufferToImage(stagingbuffer, *tex_image, (uint32_t)tex_width, (uint32_t)tex_height);
+	wsVulkanTransitionImageLayout(*tex_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	
 	// Clean up!
 	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
@@ -663,7 +664,7 @@ VkResult wsVulkanCreateTextureImage(const char* path)
 		
 	return result;
 }
-VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkFormat format, VkImageAspectFlags aspect_flags)
+VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags)
 {
 	VkImageViewCreateInfo view_info = {};
 	view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -689,7 +690,7 @@ VkResult wsVulkanCreateImageView(VkImageView* image_view, VkImage* image, VkForm
 void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new)
 {
 	VkImageMemoryBarrier barrier_acquire = {};
-	VkImageMemoryBarrier barrier_release = {};	// Only used if a queue family ownership transfer is necessary.
+	VkImageMemoryBarrier barrier_release = {};	// Only used if queue family ownership transfer is necessary.
 	barrier_acquire.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier_acquire.oldLayout = layout_old;
 	barrier_acquire.newLayout = layout_new;
@@ -897,7 +898,7 @@ VkResult wsVulkanCreateDepthResources()
 	VkResult result = wsVulkanCreateImage(vk->swapchain.extent.width, vk->swapchain.extent.height, depth_format, VK_IMAGE_TILING_OPTIMAL, 
 											VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->depthimage, 
 											&vk->depthimage_memory);
-	result = wsVulkanCreateImageView(&vk->depthimage_view, &vk->depthimage, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
+	result = wsVulkanCreateImageView(&vk->depthimage, &vk->depthimage_view, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	
 	return result;
 }
@@ -1157,7 +1158,7 @@ VkResult wsVulkanCreateDescriptorSets()
 		
 		VkDescriptorImageInfo image_info = {};
 		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		image_info.imageView = vk->textureimage_view;
+		image_info.imageView = vk->teximg_view;
 		image_info.sampler = vk->texturesampler;
 		
 		
@@ -1556,7 +1557,7 @@ uint32_t wsVulkanCreateImageViews() {
 	// Create image view for each swap chain image.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++)
 	{
-		VkResult result = wsVulkanCreateImageView(&vk->swapchain.image_views[i], &vk->swapchain.images[i], vk->swapchain.image_format, VK_IMAGE_ASPECT_COLOR_BIT);
+		VkResult result = wsVulkanCreateImageView(&vk->swapchain.images[i], &vk->swapchain.image_views[i], vk->swapchain.image_format, VK_IMAGE_ASPECT_COLOR_BIT);
 		if(result == VK_SUCCESS)
 			num_created++;
 	}

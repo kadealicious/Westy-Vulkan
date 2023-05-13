@@ -27,12 +27,10 @@ void wsMeshSetAttributeDescriptions(uint8_t meshID);
 void wsMeshPrintMeshData(uint8_t meshID);
 
 
-void wsMeshInit(wsMesh* mesh_data) {
-    
+void wsMeshInit(wsMesh* mesh_data)
+{
     md = mesh_data;
 	md->num_active_meshes = 0;
-	
-	uint8_t vikingroom_meshID = wsMeshCreate("models/blender_vikingroom.glb", "textures/vikingroom.png", 800, 600);
     
     printf("INFO: Meshes initialized!\n");
 }
@@ -74,6 +72,10 @@ uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_
 	{
 		printf("INFO: Mesh \"%s\" load failed w/ error code %i!\n", model_path, result);
 	}
+	
+	// Load and create image for our newly-loaded model.  Do this by creating the image using
+	/* wsVulkanCreateTextureImage(mesh_path);
+	wsVulkanCreateImageView(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT); */
 	
 	// Don't look at this.  Ever.
 	bool is_retarded = true;

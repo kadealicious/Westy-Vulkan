@@ -25,6 +25,8 @@ typedef struct wsMesh {
     uint32_t num_vertices[WS_MESH_MAX_MESHES];
 	uint16_t* indices[WS_MESH_MAX_MESHES];
 	uint32_t num_indices[WS_MESH_MAX_MESHES];
+	
+	uint8_t teximg_ndx[WS_MESH_MAX_MESHES];
     
     VkVertexInputBindingDescription binding_descs[WS_MESH_MAX_MESHES];
     VkVertexInputAttributeDescription* attribute_descs[WS_MESH_MAX_MESHES];

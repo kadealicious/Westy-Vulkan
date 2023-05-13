@@ -16,6 +16,7 @@
 
 #define WS_VULKAN_MAX_FRAMES_IN_FLIGHT 2
 #define WS_VULKAN_MAX_VERTEX_BUFFERS 4
+#define WS_VULKAN_MAX_TEXTURES 15
 #define WS_VULKAN_MAX_DESCRIPTOR_BUFFERS 10
 
 
@@ -94,9 +95,9 @@ typedef struct wsVulkan
 	VkCommandPool commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
 	VkCommandBuffer* commandbuffers;	// Buffer(s) used for recording commands to for sending to command pool.
 	
-	VkImage textureimage;
-	VkDeviceMemory textureimage_memory;
-	VkImageView textureimage_view;
+	VkImage teximg_image;
+	VkImageView teximg_view;
+	VkDeviceMemory teximg_memory;
 	
 	VkImage depthimage;					// Used for depth buffering in the fragment shader stage.
 	VkDeviceMemory depthimage_memory;
@@ -141,6 +142,8 @@ typedef struct wsVulkan
 void wsVulkanInit(wsVulkan* vulkan_data, wsMesh* mesh_data, wsCamera* camera_data, uint8_t windowID);
 VkResult wsVulkanDrawFrame(double delta_time, uint8_t cameraID);
 void wsVulkanStop();
+
+VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory);
 
 float wsVulkanGetAspectRatio();
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Used for interfacing in window.c.
