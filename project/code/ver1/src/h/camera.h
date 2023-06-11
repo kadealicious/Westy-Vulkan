@@ -39,10 +39,6 @@ void wsCameraUpdateProjection(uint8_t cameraID);
 void wsCameraUpdateFPSCamera(uint8_t cameraID, float time_delta);
 
 float wsCameraGetFOV(uint8_t cameraID);
-vec3* wsCameraGetPositionPtr(uint8_t cameraID);
-vec3* wsCameraGetForwardPtr(uint8_t cameraID);
-vec3* wsCameraGetUpPtr(uint8_t cameraID);
-mat4* wsCameraGetProjectionPtr(uint8_t cameraID);
 /*
 vec3 wsCameraGetPosition(uint8_t cameraID);
 vec4 wsCameraGetRotation(uint8_t cameraID);

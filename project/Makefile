@@ -7,12 +7,12 @@ HEADDIR = code/src/h
 OBJDIR = code/obj
 CLEANDIR = code\obj
 
-_OBJS = main.o window.o input.o vulkan_interface.o shader.o mesh.o camera.o
+_OBJS = main.o window.o input.o graphics.o shader.o mesh.o camera.o game.o
 OBJS = $(patsubst %, $(OBJDIR)/%,$(_OBJS))
 CLEANOBJS = $(patsubst %, $(CLEANDIR)\\%,$(_OBJS))
-_SRCS = main.c window.c input.c vulkan_interface.c shader.c mesh.c camera.c
+_SRCS = main.c window.c input.c graphics.c shader.c mesh.c camera.c game.c
 SRCS = $(patsubst %, $(SRCDIR)/%,$(_SRCS))
-_HEADS = stb_image.h window.h input.h vulkan_interface.h shader.h mesh.h camera.h
+_HEADS = stb_image.h window.h input.h graphics.h shader.h mesh.h camera.h game.h
 HEADS = $(patsubst %, $(HEADDIR)/%,$(_HEADS))
 
 all: app
@@ -23,13 +23,15 @@ code/obj/window.o: code/src/window.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/input.o: code/src/input.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
-code/obj/vulkan_interface.o: code/src/vulkan_interface.c
+code/obj/graphics.o: code/src/graphics.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/shader.o: code/src/shader.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/mesh.o: code/src/mesh.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/camera.o: code/src/camera.c
+	$(CC) $(CCFLAGS) -c $^ -o $@
+code/obj/game.o: code/src/game.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 
 shaders: 

@@ -3,52 +3,28 @@
 #include"h/input.h"
 #include"h/window.h"
 
-// Misc. input data.
-typedef struct wsInput
+wsInput* input;
+
+void wsInputInit(wsInput* inputData, uint8_t windowID, float mouse_sensitivity)
 {
-	uint8_t windowID;
-}
-wsInput;
-
-// Keyboard data.
-typedef struct wsKeyboard
-{
-	int key_last;
-}
-wsKeyboard;
-
-// Mouse data.
-typedef struct wsMouse
-{
-	vec2 position;
-	vec2 movement;
-	float sensitivity;
-	float scroll;
-	bool first_move;
-}
-wsMouse;
-
-wsInput input;
-wsKeyboard keys;
-wsMouse mouse;
-
-
-void wsInputInit(uint8_t windowID, float mouse_sensitivity) {
-	input.windowID = windowID;
-    mouse.sensitivity = mouse_sensitivity;
-	mouse.scroll = 0.0f;
-	mouse.first_move = true;
+	// This is important.  Lol.
+	input = inputData;
 	
-	keys.key_last = -1;
+	input->windowID = windowID;
+    input->mouse.sensitivity = mouse_sensitivity;
+	input->mouse.scroll = 0.0f;
+	input->mouse.firstMove = true;
+	
+	input->keyLast = -1;
 	
 	GLFWwindow* window_ptr = wsWindowGetPtr(windowID);
 	glfwSetKeyCallback(window_ptr, wsInputKeyCallback);
 	glfwSetCursorPosCallback(window_ptr, wsInputCursorPosCallback);
 	glfwSetScrollCallback(window_ptr, wsInputScrollCallback);
 	glfwSetInputMode(window_ptr, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	glfwSetCursorPos(window_ptr, wsWindowGetWidth(input.windowID) / 2.0f, wsWindowGetHeight(input.windowID) / 2.0f);
+	glfwSetCursorPos(window_ptr, wsWindowGetWidth(input->windowID) / 2.0f, wsWindowGetHeight(input->windowID) / 2.0f);
 
-    printf("INFO: Input initialized: window ID %i, mouse sens %f\n", windowID, mouse.sensitivity);
+    printf("INFO: Input initialized: window ID %i, mouse sens %f\n", windowID, input->mouse.sensitivity);
 }
 
 // Function for getting initial impulse of key press.
@@ -65,18 +41,18 @@ char key_nunce[GLFW_KEY_LAST + 1];
      (key_nunce[key] ? false : (key_nunce[key] = true)) :   \
      (key_nunce[key] = false))
 
-int wsInputGetKeyLast()	{ return keys.key_last; }
-bool wsInputGetKeyHold(int key)	{ return (glfwGetKey(wsWindowGetPtr(input.windowID), key) == GLFW_PRESS); }
-bool wsInputGetKeyPress(int key)	{ return (glfwGetKeyOnce(wsWindowGetPtr(input.windowID), key) == GLFW_PRESS); }
-bool wsInputGetKeyRelease(int key)	{ return (glfwGetKey(wsWindowGetPtr(input.windowID), key) == GLFW_RELEASE) && (key == keys.key_last); }
-bool wsInputGetKeyReleaseOnce(int key)	{ return (glfwGetKeyReleasedOnce(wsWindowGetPtr(input.windowID), key) == GLFW_PRESS); }
+int wsInputGetKeyLast()					{ return input->keyLast; }
+bool wsInputGetKeyHold(int key)			{ return (glfwGetKey(wsWindowGetPtr(input->windowID), key) == GLFW_PRESS); }
+bool wsInputGetKeyPress(int key)		{ return (glfwGetKeyOnce(wsWindowGetPtr(input->windowID), key) == GLFW_PRESS); }
+bool wsInputGetKeyRelease(int key)		{ return (glfwGetKey(wsWindowGetPtr(input->windowID), key) == GLFW_RELEASE) && (key == input->keyLast); }
+bool wsInputGetKeyReleaseOnce(int key)	{ return (glfwGetKeyReleasedOnce(wsWindowGetPtr(input->windowID), key) == GLFW_PRESS); }
 
-float wsInputGetMousePosX()		{ return mouse.position[0]; }
-float wsInputGetMousePosY()		{ return mouse.position[1]; }
-float wsInputGetMouseMoveX()	{ return mouse.movement[0]; }
-float wsInputGetMouseMoveY()	{ return mouse.movement[1]; }
-float wsInputGetMouseScroll()	{ return mouse.scroll; }
-void wsInputResetMouseMove()		{ mouse.movement[0] = 0.0f; mouse.movement[1] = 0.0f; }
+float wsInputGetMousePosX()		{ return input->mouse.position[0]; }
+float wsInputGetMousePosY()		{ return input->mouse.position[1]; }
+float wsInputGetMouseMoveX()	{ return input->mouse.movement[0]; }
+float wsInputGetMouseMoveY()	{ return input->mouse.movement[1]; }
+float wsInputGetMouseScroll()	{ return input->mouse.scroll; }
+void wsInputResetMouseMove()	{ input->mouse.movement[0] = 0.0f; input->mouse.movement[1] = 0.0f; }
 
 // Automatically calls glfwPollEvents().
 void wsInputPreUpdate()
@@ -85,42 +61,45 @@ void wsInputPreUpdate()
 }
 void wsInputPostUpdate()
 {
-	mouse.movement[0] = 0.0f;
-	mouse.movement[1] = 0.0f;
+	input->mouse.movement[0] = 0.0f;
+	input->mouse.movement[1] = 0.0f;
 }
 
 void wsInputKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	keys.key_last = key;
+	input->keyLast = key;
 }
 
-void wsInputCursorPosCallback(GLFWwindow* window, double posx, double posy) {
+void wsInputCursorPosCallback(GLFWwindow* window, double posx, double posy)
+{
 	static float posx_prev;
 	static float posy_prev;
 	
-	if(mouse.first_move) {
+	if(input->mouse.firstMove)
+	{
 		posx_prev = posx;
 		posy_prev = posy;
-		mouse.first_move = false;
+		input->mouse.firstMove = false;
 	}
 	
 	float offsetx = posx - posx_prev;
 	float offsety = posy_prev - posy;
 	posx_prev = posx;
 	posy_prev = posy;
-	offsetx *= mouse.sensitivity;
-	offsety *= mouse.sensitivity;
+	offsetx *= input->mouse.sensitivity;
+	offsety *= input->mouse.sensitivity;
 	
-	mouse.movement[0] = offsetx;
-	mouse.movement[1] = offsety;
-	mouse.position[0] += mouse.movement[0];
-	mouse.position[1] += mouse.movement[1];
+	input->mouse.movement[0] = offsetx;
+	input->mouse.movement[1] = offsety;
+	input->mouse.position[0] += input->mouse.movement[0];
+	input->mouse.position[1] += input->mouse.movement[1];
 }
 
-void wsInputScrollCallback(GLFWwindow* window, double offsetx, double offsety) {
-	mouse.scroll -= (float)offsety;
-	if(mouse.scroll < -100.0f)
-		mouse.scroll = -100.0f;
-	else if(mouse.scroll > 100.0f)
-		mouse.scroll = 100.0f;
+void wsInputScrollCallback(GLFWwindow* window, double offsetx, double offsety)
+{
+	input->mouse.scroll -= (float)offsety;
+	if(input->mouse.scroll < -100.0f)
+		input->mouse.scroll = -100.0f;
+	else if(input->mouse.scroll > 100.0f)
+		input->mouse.scroll = 100.0f;
 }

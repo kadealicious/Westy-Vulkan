@@ -4,26 +4,8 @@
 #include<GLFW/glfw3.h>
 #include<CGLM/cglm.h>
 
-// Mouse data.
-typedef struct wsMouse
-{
-	vec2 position;
-	vec2 movement;
-	float sensitivity;
-	float scroll;
-	bool firstMove;
-}
-wsMouse;
-// Container for all input.
-typedef struct wsInput
-{
-	uint8_t windowID;
-	int keyLast;
-	wsMouse mouse;
-}
-wsInput;
 
-void wsInputInit(wsInput* inputData, uint8_t windowID, float mouse_sensitivity);
+void wsInputInit(uint8_t windowID, float mouse_sensitivity);
 void wsInputPreUpdate();
 void wsInputPostUpdate();
 

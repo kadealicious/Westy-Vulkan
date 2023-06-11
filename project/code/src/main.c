@@ -6,133 +6,166 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include"h/window.h"
 #include"h/input.h"
-#include"h/vulkan_interface.h"
-#include"h/mesh.h"
-#include"h/camera.h"
+#include"h/window.h"
+#include"h/audio.h"
+#include"h/graphics.h"
+#include"h/game.h"
 
-// Enables or disables debug mode.  0 == off, 1 == on, 2 == verbose, 3 == too verbose.  Verbosity options are TODO.
+// Enables or disables debug mode.  0 == off, 1 == on.
 #define DEBUG 1
+enum WS_APP_STATES { PAUSED, UNPAUSED, REQUEST_PAUSE, REQUEST_UNPAUSE, REQUEST_QUIT };
+
+typedef struct wsTime
+{
+	struct timespec info;
+	time_t start;
+	time_t end;
+	time_t delta;
+	double deltaSecs;
+	uint16_t numFrames;
+} wsTime;
 
 #define max(x,y) (((x) >= (y)) ? (x) : (y))
 #define min(x,y) (((x) <= (y)) ? (x) : (y))
-
+void wsMainControlPauseQuit(uint8_t* appState);
 void wsGLFWErrorCallback(int code, const char* description);
-
 
 int main(int argc, char* argv[])
 {
 	printf("===BEGIN%s===\n", DEBUG ? " DEBUG" : "");
 	
+	// TODO: Implement these things.
+	wsAudio audio = {};
 	
-	// Program data struct 0-initialization: 
-	wsWindow wnd = {};
-	wsVulkan vk = {};
-	wsMesh md = {};		// Managed in vulkan_interface.c.
-	wsCamera cm = {};
+	// Initialize GLFW window.
+	wsWindow window = {};
+	wsWindowInit(&window);
+	uint8_t windowID = wsWindowCreate(640, 480);
+	GLFWwindow* windowPtr = wsWindowGetPtr(windowID);
 	
+	// Bind keyboard input to our GLFW window.
+	wsInput input = {};
+	wsInputInit(&input, windowID, 1.0f);
 	
-	// Initialize GLFW.
-	uint8_t windowID = wsWindowInit(640, 480, &wnd);
-	GLFWwindow* window_ptr = wsWindowGetPtr(windowID);
-	wsInputInit(windowID, 1.0f);					// Bind keyboard input to our GLFW window.
-	
-	// Initialize cameras!
-	wsCameraInit(&cm);
-	uint8_t camera_main = wsCameraCreate();
-	
-	// Create meshes!
-	wsMeshInit(&md);
-	uint8_t vikingroom_meshID = wsMeshCreate("models/blender_vikingroom.glb", "textures/vikingroom.png", 800, 600);
-	
-	// Initialize Vulkan.
+	// Initialize graphics.
+	wsVulkan gfx = {};
 	wsVulkanSetDebug(DEBUG);
-	wsVulkanInit(&vk, &md, &cm, windowID);
+	wsVulkanInit(&gfx, windowID);
 	
+	// Initialize game.
+	wsGame game = {};
+	wsGameInit(&game);
+	wsGameSetCameraPointers(&gfx);
 	
-	// Main loop.
+	// For restricting update rate for more consistent simulation.
+	wsTime time = {};
+	uint8_t appState = REQUEST_UNPAUSE;
+	
 	printf("\n===START%s RUN===\n", DEBUG ? " DEGUB" : "");
-	
-	struct timespec time_info = {};
-	time_t time_start = 0;
-	time_t time_end = 0;
-	time_t time_delta = 0;
-	double time_delta_adj = 0;
-	uint16_t num_frames = 0;
-	
-	bool is_paused = false;
-	
-	while(!glfwWindowShouldClose(window_ptr))
+	while(!glfwWindowShouldClose(windowPtr))
 	{
+		// ------------------------------------------------------------------
 		// Pre-logic-step.
-		time_delta_adj = max(time_delta * 0.000000001, 0.0);
-		timespec_get(&time_info, TIME_UTC);
-		time_start = time_info.tv_nsec;
+		// ------------------------------------------------------------------
+		time.deltaSecs = max(time.delta * 0.000000001, 0.0);
+		timespec_get(&time.info, TIME_UTC);
+		time.start = time.info.tv_nsec;
 		
 		// Poll input events through GLFW.
-		wsInputPreUpdate();
-		if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE))
+		wsInputPreUpdate();		
+		wsMainControlPauseQuit(&appState);
+		
+		switch(appState)
 		{
-			printf("INFO: User has requested window should close!\n");
-			glfwSetWindowShouldClose(window_ptr, GLFW_TRUE);
-		}
-		if(wsInputGetKeyReleaseOnce(GLFW_KEY_F1))
-		{
-			if(!is_paused)
-			{
-				printf("INFO: Westy paused!\n");
-				glfwSetInputMode(window_ptr, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-				glfwSetCursorPos(window_ptr, wsWindowGetWidth(windowID) / 2.0f, wsWindowGetHeight(windowID) / 2.0f);
+			case REQUEST_QUIT: 
+				glfwSetWindowShouldClose(windowPtr, GLFW_TRUE);
+				break;
+			
+			case REQUEST_PAUSE: 
+				glfwSetInputMode(windowPtr, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+				float windowCenterX = wsWindowGetWidth(windowID) / 2.0f;
+				float windowCenterY = wsWindowGetHeight(windowID) / 2.0f;
+				glfwSetCursorPos(windowPtr, windowCenterX, windowCenterY);
 				wsInputResetMouseMove();
-			}
-			else
-			{
-				printf("INFO: Westy unpaused!\n");
-				glfwSetInputMode(window_ptr, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+				break;
+			
+			case REQUEST_UNPAUSE: 
+				glfwSetInputMode(windowPtr, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 				wsInputResetMouseMove();
-			}
-			is_paused = !is_paused;
+				break;
+			
+			case UNPAUSED: 
+			case PAUSED: 
+			default: 
+				break;
 		}
 		
-		
-		
-		
+		// ------------------------------------------------------------------
 		// Logic step.
-		if(!is_paused)
+		// ------------------------------------------------------------------
+		if(appState == UNPAUSED)
 		{
-			wsCameraUpdateFPSCamera(camera_main, time_delta_adj);
+			wsGameUpdateFPSCamera(time.deltaSecs);
 		}
 		
-		
-		
-		
+		// ------------------------------------------------------------------
 		// Post-logic step.
-		wsCameraUpdateProjection(camera_main);
-		wsVulkanDrawFrame(time_delta_adj, camera_main);
+		// ------------------------------------------------------------------
+		wsGameUpdate(time.deltaSecs);
+		wsVulkanDrawFrame(time.deltaSecs);
+		wsInputPostUpdate();
 		
-		if(DEBUG && time_delta < 0)
+		if(DEBUG && time.delta < 0)
 		{
 			// TODO: Set window title to FPS instead of printing it.
-			printf("INFO: Time is %lld // %i fps\n", time_info.tv_sec, num_frames);
-			num_frames = 0;
+			printf("INFO: Time is %lld // %i fps\n", time.info.tv_sec, time.numFrames);
+			time.numFrames = 0;
 		}
-		timespec_get(&time_info, TIME_UTC);
-		time_end = time_info.tv_nsec;
-		time_delta = (time_end - time_start);
-		num_frames++;
-		
-		wsInputPostUpdate();
+		timespec_get(&time.info, TIME_UTC);
+		time.end = time.info.tv_nsec;
+		time.delta = (time.end - time.start);
+		time.numFrames++;
 	}
 	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	
-	
 	// Program exit procedure.
 	wsCameraStop();
-	wsVulkanStop(&vk);
-	wsWindowExit(windowID);
-	
+	wsVulkanStop(&gfx);
+	wsWindowTerminate();
 	
 	printf("===END%s===\n", DEBUG ? " DEBUG" : "");
 	return 0;
+}
+
+void wsMainControlPauseQuit(uint8_t* appState)
+{
+	// Change pause/unpause requests into distinct "already paused" states.
+	if(*appState == REQUEST_UNPAUSE)
+		*appState = UNPAUSED;
+	if(*appState == REQUEST_PAUSE)
+		*appState = PAUSED;
+	
+	// Control quit behavior.
+	if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE))
+	{
+		printf("INFO: User has requested window should close!\n");
+		*appState = REQUEST_QUIT;
+		return;
+	}
+	
+	// Control pause behavior.
+	if(wsInputGetKeyReleaseOnce(GLFW_KEY_F1))
+	{
+		if(*appState == UNPAUSED)
+		{
+			printf("INFO: Westy paused!\n");
+			*appState = REQUEST_PAUSE;
+		}
+		else
+		{
+			printf("INFO: Westy unpaused!\n");
+			*appState = REQUEST_UNPAUSE;
+		}
+	}
 }

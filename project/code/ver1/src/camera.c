@@ -1,5 +1,5 @@
 #include<stdio.h>
-#include"h/graphics.h"
+#include"h/vulkan_interface.h"
 #include"h/camera.h"
 #include"h/input.h"
 
@@ -123,10 +123,6 @@ void wsCameraStop()
 
 float wsCameraGetFOV(uint8_t cameraID)
 	{ return cm->fov[cameraID]; }
-vec3* wsCameraGetPositionPtr(uint8_t cameraID)	{ return &cm->position[cameraID]; }
-vec3* wsCameraGetForwardPtr(uint8_t cameraID)	{ return &cm->forward[cameraID]; }
-vec3* wsCameraGetUpPtr(uint8_t cameraID)		{ return &cm->up[cameraID]; }
-mat4* wsCameraGetProjectionPtr(uint8_t cameraID){ return &cm->projection[cameraID]; }
 /*
 vec3 wsCameraGetPosition(uint8_t cameraID)
 	{ return cm->position[cameraID]; }
