@@ -6,7 +6,8 @@
         "glfw3.h": "c",
         "graphics.h": "c",
         "time.h": "c",
-        "sstream": "c"
+        "sstream": "c",
+        "vulkan.h": "c"
     },
     "cmake.configureOnOpen": true
 }

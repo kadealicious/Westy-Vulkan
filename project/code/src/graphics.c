@@ -15,6 +15,17 @@
 #include"h/window.h"
 
 
+enum WS_VK_ID_STATE
+	{ NONE = INT32_MAX };
+enum WS_VK_COMMAND_TYPE
+	{ COMMAND_GRAPHICS, COMMAND_TRANSFER, COMMAND_QUEUE_OWNERSHIP_TRANSFER };
+enum GPU_INCOMPATIBILITY_CODES
+{
+	NO_GEOMETRY_SHADER = -100, NO_GRAPHICS_FAMILY, NO_TRANSFER_FAMILY, NO_PRESENTATION_FAMILY, 
+	NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT
+};
+
+
 // Contains pointer to all Vulkan data.
 wsVulkan* vk;
 
@@ -74,6 +85,9 @@ VkResult wsVulkanBeginSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t
 VkResult wsVulkanEndSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype);
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);
 
+uint8_t wsVulkanCreateRenderObject(const char* meshPath, const char* texPath, uint16_t texWidth, uint16_t texHeight);
+void wsVulkanCreateTexture(const char* texPath);
+void wsVulkanDestroyTexture(uint8_t texID);
 VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Functions for depth buffering.
@@ -110,22 +124,6 @@ void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t 
 uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num < min ? min : num;return t > max ? max : t;}	// Clamp function!  WHY DOESN'T C HAVE THIS BUILT IN
 
 
-enum WS_VK_ID_STATE
-	{ NONE = INT32_MAX };
-enum WS_VK_COMMAND_TYPE
-	{ COMMAND_GRAPHICS, COMMAND_TRANSFER, COMMAND_QUEUE_OWNERSHIP_TRANSFER };
-enum GPU_INCOMPATIBILITY_CODES
-{
-	NO_GEOMETRY_SHADER = -100, NO_GRAPHICS_FAMILY, NO_TRANSFER_FAMILY, NO_PRESENTATION_FAMILY, 
-	NO_DEVICE_EXTENSION_SUPPORT, NO_SWAPCHAIN_SUPPORT
-};
-
-
-// -------------------------------- //
-// Function definitions start here! //
-// -------------------------------- //
-
-
 // Call after wsWindowInit().
 void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID)
 {
@@ -136,9 +134,9 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID)
 	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
 	glfwSetFramebufferSizeCallback(wsWindowGetPtr(windowID), wsVulkanFramebufferResizeCallback);	// Allow Vulkan to resize its framebuffer when the window resizes.
 	
-	// Create meshes!
+	// Non-API stuff.
 	wsMeshInit(&vk->meshbuffer);
-	uint8_t vikingRoomMeshID = wsMeshCreate("models/blender_vikingroom.glb", "textures/vikingroom.png", 800, 600);
+	// wsTextureInit(&vk->texMan);
 
 	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
 
@@ -193,10 +191,9 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID)
 	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	
-	// TODO: Make it so that these functions choose your texture image index for you and return it for storage elsewhere.
-	wsVulkanCreateTextureImage(&vk->teximg_image, &vk->teximg_memory, "textures/bobross.png");
-	wsVulkanCreateImageView(&vk->teximg_image, &vk->teximg_view, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-	
+	// Create test render object.  TODO fix this shit.
+	uint8_t vikingRoomMeshID = wsVulkanCreateRenderObject("models/testcube.glb", "textures/bobross.png", 800, 600);
+
 	wsVulkanCreateTextureSampler();	// Creates a texture sampler for use with ALL textures!
 	
 	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
@@ -314,6 +311,7 @@ void wsVulkanTerminate()
 {
 	// Stop external Westy systems that Vulkan uses.
 	wsMeshTerminate();
+	// wsTextureTerminate();
 	
 	// Wait for all asynchronous elements to finish execution and return to an idle state before continuing on.sss
 	vkDeviceWaitIdle(vk->logical_device);
@@ -346,9 +344,9 @@ void wsVulkanTerminate()
 	
 	vkDestroySampler(vk->logical_device, vk->texturesampler, NULL);			printf("INFO: Vulkan texture sampler destroyed!\n");
 	
-	vkDestroyImageView(vk->logical_device, vk->teximg_view, NULL);	printf("INFO: Vulkan image view destroyed!\n");
-	vkDestroyImage(vk->logical_device, vk->teximg_image, NULL);				printf("INFO: Vulkan image destroyed!\n");
-	vkFreeMemory(vk->logical_device, vk->teximg_memory, NULL);		printf("INFO: Vulkan image memory destroyed!\n");
+	wsVulkanDestroyTexture(0);
+	// wsTextureUnload(NULL, 0);
+	// printf("INFO: All Vulkan textures destroyed!\n");
 	
 	// Free UBO, vertex, & index buffer memory.
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
@@ -527,6 +525,29 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 	
 	printf("ERROR: Vulkan memory type not found!\n");
 	return NONE;
+}
+
+uint8_t wsVulkanCreateRenderObject(const char* meshPath, const char* texPath, uint16_t texWidth, uint16_t texHeight)
+{
+	wsVulkanCreateTexture(texPath);
+	uint8_t meshID = wsMeshCreate(meshPath, 0);	// TODO: Make this ID not change when meshes are consolidated?  I forgot if it does or not.
+
+	return meshID;
+
+	// TODO: Implement destroying render objects, and keep track of which ones we currently have loaded in.
+}
+
+void wsVulkanCreateTexture(const char* texPath)
+{
+    wsVulkanCreateTextureImage(&vk->testImage, &vk->testMemory, texPath);
+	wsVulkanCreateImageView(&vk->testImage, &vk->testView, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+}
+
+void wsVulkanDestroyTexture(uint8_t texID)
+{
+	vkDestroyImageView(vk->logical_device, vk->testView, NULL);
+	vkDestroyImage(vk->logical_device, vk->testImage, NULL);
+	vkFreeMemory(vk->logical_device, vk->testMemory, NULL);
 }
 
 VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
@@ -1116,7 +1137,7 @@ VkResult wsVulkanCreateDescriptorSets()
 		
 		VkDescriptorImageInfo image_info = {};
 		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		image_info.imageView = vk->teximg_view;
+		image_info.imageView = vk->testView;	// vk->texMan.texture[0].view;	// TODO: this might be fucked up idk
 		image_info.sampler = vk->texturesampler;
 		
 		
@@ -1336,7 +1357,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	// Configure vertex data receival info.
 	VkPipelineVertexInputStateCreateInfo vertexinput_info = {};
 	vertexinput_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	// Configure how vertices are stored and read through wsMesh.
+	// Configure how vertices are stored and read through wsMesh.  0 is the ID of the test mesh.
 	VkVertexInputBindingDescription* binding_desc = wsMeshGetBindingDescription(0);
 	VkVertexInputAttributeDescription* attribute_desc = wsMeshGetAttributeDescriptions(0);
 	vertexinput_info.vertexBindingDescriptionCount	= 1;
@@ -2254,12 +2275,6 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* create_info)
 	printf("\tRequired Vulkan validation layers are supported!\n");
 	return true;
 }
-
-
-// -------------------------------- //
-// 			Fun lil extras! 		//
-// -------------------------------- //
-
 
 // Print statements for things that return a VkResult.
 void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result)

@@ -11,7 +11,7 @@
 wsMesh* md;
 
 
-uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_t tex_width, const uint32_t tex_height);
+uint8_t wsMeshCreate(const char* model_path, uint8_t texID);
 void wsMeshCopyData(uint8_t destID, uint8_t srcID);
 void wsMeshMoveData(uint8_t destID, uint8_t srcID);
 void wsMeshSetMap(uint8_t destID, uint8_t srcID);
@@ -31,17 +31,19 @@ void wsMeshInit(wsMesh* mesh_data)
 {
     md = mesh_data;
 	md->num_active_meshes = 0;
+	uint8_t defaultMesh = wsMeshCreate("models/testcube.glb", 0);
     
-    printf("INFO: Meshes initialized!\n");
+    printf("INFO: Mesh manager initialized!\n");
 }
+
 void wsMeshTerminate()
 {
     wsMeshUnload(NULL, 0);
     
-    printf("INFO: Meshes destroyed!\n");
+    printf("INFO: Mesh manager terminated!\n");
 }
 
-uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_t tex_width, const uint32_t tex_height)
+uint8_t wsMeshCreate(const char* model_path, uint8_t texID)
 {
 	// Find a vacant meshID to use!
     uint8_t meshID = (WS_MESH_MAX_MESHES+1);
@@ -62,7 +64,7 @@ uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_
 	// Load model from path.
 	cgltf_options options = {0};
 	cgltf_data* data = NULL;
-	cgltf_result result = cgltf_parse_file(&options, "models/blender_vikingroom.glb", &data);
+	cgltf_result result = cgltf_parse_file(&options, model_path, &data);
 	if(result == cgltf_result_success)
 	{
 		printf("INFO: Mesh \"%s\" loaded successfully!\n", model_path);
@@ -188,6 +190,8 @@ uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_
     wsMeshSetBindingDescription(meshID);
     wsMeshSetAttributeDescriptions(meshID);
     
+	md->teximg_ndx[meshID] = texID;
+
     md->isloaded[meshID] = WS_MESH_LOADED;
 	md->num_active_meshes++;
 	
@@ -197,6 +201,7 @@ uint8_t wsMeshCreate(const char* model_path, const char* tex_path, const uint32_
 	wsMeshConsolidateBuffer();
 	return meshID;
 }
+
 void wsMeshUnload(uint8_t* meshIDs, uint8_t num_meshes)
 {
 	if(meshIDs == NULL)
@@ -237,6 +242,7 @@ void wsMeshCopyData(uint8_t destID, uint8_t srcID)
 	md->attribute_descs[destID] = md->attribute_descs[srcID];
 	md->num_attribute_descs[destID] = md->num_attribute_descs[srcID];
 	md->isloaded[destID] = md->isloaded[srcID];
+	md->teximg_ndx[destID] = md->teximg_ndx[srcID];
 }
 void wsMeshMoveData(uint8_t destID, uint8_t srcID)
 {

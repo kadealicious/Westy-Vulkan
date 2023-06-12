@@ -1,6 +1,7 @@
 #ifndef MESH_H_
 #define MESH_H_
 
+
 #include<stdbool.h>
 #include<vulkan/vulkan.h>
 #include<CGLM/cglm.h>
@@ -8,17 +9,19 @@
 #define WS_MESH_MAX_MESHES 100
 #define WS_MESH_MAX_ATTRIBUTE_DESCRIPTIONS 3
 
+enum WS_MESH_MESHID_STATES { WS_MESH_UNLOADED = 0, WS_MESH_LOADED = 1 };
+
 
 typedef struct wsVertex
 {
     vec3 position;
     vec3 color;
 	vec2 texcoord;
-    
-} wsVertex;
+}
+wsVertex;
 
-enum WS_MESH_MESHID_STATES { WS_MESH_UNLOADED = 0, WS_MESH_LOADED = 1 };
-typedef struct wsMesh {
+typedef struct wsMesh
+{
 	uint8_t num_active_meshes;
     uint8_t isloaded[WS_MESH_MAX_MESHES];
     wsVertex* vertices[WS_MESH_MAX_MESHES];
@@ -31,12 +34,12 @@ typedef struct wsMesh {
     VkVertexInputBindingDescription binding_descs[WS_MESH_MAX_MESHES];
     VkVertexInputAttributeDescription* attribute_descs[WS_MESH_MAX_MESHES];
     uint8_t num_attribute_descs[WS_MESH_MAX_MESHES];
-    
-} wsMesh;
+}
+wsMesh;
 
 
 void wsMeshInit(wsMesh* mesh_data);
-uint8_t wsMeshCreate();
+uint8_t wsMeshCreate(const char* model_path, uint8_t texID);
 void wsMeshTerminate();
 
 uint32_t wsMeshGetCurrentVertexBufferSize();
@@ -48,5 +51,6 @@ void wsMeshPrintMeshData(uint8_t meshID);
 uint8_t wsMeshGetNumAttributeDescriptions(uint8_t meshID);
 VkVertexInputAttributeDescription* wsMeshGetAttributeDescriptions(uint8_t meshID);
 VkVertexInputBindingDescription* wsMeshGetBindingDescription(uint8_t meshID);
+
 
 #endif

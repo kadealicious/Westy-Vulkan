@@ -29,7 +29,7 @@ wsTime;
 
 #define max(x,y) (((x) >= (y)) ? (x) : (y))
 #define min(x,y) (((x) <= (y)) ? (x) : (y))
-void wsMainControlPauseQuit(uint8_t* appState);
+void wsAppControlPauseQuit(uint8_t* appState);
 void wsGLFWErrorCallback(int code, const char* description);
 
 int main(int argc, char* argv[])
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
 	wsGameInit(&game);
 	wsGameSetCameraPointers(&gfx);	// TODO: This should be handled outside of game.c.
 	
-	// For restricting update rate for more consistent simulation.
+	// Restrict update rate for more consistent simulation.
 	wsTime time = {};
 	uint8_t appState = REQUEST_UNPAUSE;
 	
@@ -70,13 +70,12 @@ int main(int argc, char* argv[])
 		// Pre-logic-step.
 		// ------------------------------------------------------------------
 		time.deltaSecs = max(time.delta * 0.000000001, 0.0);
-		// timespec_get(&time.info, TIME_UTC);
 		clock_gettime(CLOCK_REALTIME, &time.info);
 		time.start = time.info.tv_nsec;
 		
 		// Poll input events through GLFW.
 		wsInputPreUpdate();		
-		wsMainControlPauseQuit(&appState);
+		wsAppControlPauseQuit(&appState);
 		
 		switch(appState)
 		{
@@ -141,7 +140,6 @@ int main(int argc, char* argv[])
 			}
 		}
 
-		// timespec_get(&time.info, TIME_UTC);
 		clock_gettime(CLOCK_REALTIME, &time.info);
 		time.end = time.info.tv_nsec;
 		time.delta = (time.end - time.start);
@@ -158,7 +156,7 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-void wsMainControlPauseQuit(uint8_t* appState)
+void wsAppControlPauseQuit(uint8_t* appState)
 {
 	// Change pause/unpause requests into distinct "already paused" states.
 	if(*appState == REQUEST_UNPAUSE)

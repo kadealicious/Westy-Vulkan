@@ -7,12 +7,12 @@ HEADDIR = code/src/h
 OBJDIR = code/obj
 CLEANDIR = code\obj
 
-_OBJS = main.o window.o input.o graphics.o shader.o mesh.o camera.o game.o
+_OBJS = main.o window.o input.o graphics.o shader.o mesh.o texture.o camera.o game.o
 OBJS = $(patsubst %, $(OBJDIR)/%,$(_OBJS))
 CLEANOBJS = $(patsubst %, $(CLEANDIR)\\%,$(_OBJS))
-_SRCS = main.c window.c input.c graphics.c shader.c mesh.c camera.c game.c
+_SRCS = main.c window.c input.c graphics.c shader.c mesh.c texture.c camera.c game.c
 SRCS = $(patsubst %, $(SRCDIR)/%,$(_SRCS))
-_HEADS = stb_image.h window.h input.h graphics.h shader.h mesh.h camera.h game.h
+_HEADS = stb_image.h window.h input.h graphics.h shader.h mesh.h texture.h camera.h game.h
 HEADS = $(patsubst %, $(HEADDIR)/%,$(_HEADS))
 
 all: app
@@ -28,6 +28,8 @@ code/obj/graphics.o: code/src/graphics.c
 code/obj/shader.o: code/src/shader.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/mesh.o: code/src/mesh.c
+	$(CC) $(CCFLAGS) -c $^ -o $@
+code/obj/texture.o: code/src/texture.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/camera.o: code/src/camera.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
