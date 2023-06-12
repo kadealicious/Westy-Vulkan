@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "audio.h": "c",
+        "window.h": "c",
+        "input.h": "c",
+        "glfw3.h": "c",
+        "graphics.h": "c",
+        "time.h": "c",
+        "sstream": "c"
+    },
+    "cmake.configureOnOpen": true
+}

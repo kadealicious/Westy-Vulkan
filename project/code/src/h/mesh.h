@@ -37,7 +37,7 @@ typedef struct wsMesh {
 
 void wsMeshInit(wsMesh* mesh_data);
 uint8_t wsMeshCreate();
-void wsMeshStop();
+void wsMeshTerminate();
 
 uint32_t wsMeshGetCurrentVertexBufferSize();
 uint32_t wsMeshGetCurrentIndexBufferSize();

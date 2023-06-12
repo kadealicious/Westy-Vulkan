@@ -13,6 +13,17 @@ void wsCameraInit(wsCamera* camera)
 	
 	printf("INFO: Initializing cameras!\n");
 }
+
+void wsCameraTerminate()
+{
+	for(uint8_t i = 0; i < WS_CAMERA_MAX_CAMERAS; i++)
+	{
+		cm->is_active[i] = false;
+	}
+	
+	printf("INFO: All cameras deactivated!\n");
+}
+
 uint8_t wsCameraCreate()
 {
 	static uint8_t cameraID = 0;
@@ -38,6 +49,12 @@ uint8_t wsCameraCreate()
 	
 	printf("WARNING: No available camera ID was found; Assigning ID 0 instead!\n");
 	return 0;
+}
+
+void wsCameraDestroy(uint8_t cameraID)
+{
+	cm->is_active[cameraID] = false;
+	printf("INFO: Camera w/ ID %i deactivated!\n", cameraID);
 }
 
 void wsCameraUpdateUBOFields(uint8_t cameraID, vec3* position, vec4* rotation, mat4* projection)
@@ -104,21 +121,6 @@ void wsCameraUpdateFPSCamera(uint8_t cameraID, float time_delta)
 	
 	float fov_new = (wsInputGetMouseScroll() * 0.5f) + 60.0f;
 	wsCameraSetFOV(cameraID, fov_new);
-}
-
-void wsCameraDestroy(uint8_t cameraID)
-{
-	cm->is_active[cameraID] = false;
-	printf("INFO: Camera w/ ID %i deactivated!\n", cameraID);
-}
-void wsCameraStop()
-{
-	for(uint8_t i = 0; i < WS_CAMERA_MAX_CAMERAS; i++)
-	{
-		cm->is_active[i] = false;
-	}
-	
-	printf("INFO: All cameras deactivated!\n");
 }
 
 float wsCameraGetFOV(uint8_t cameraID)

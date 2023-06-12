@@ -1,7 +1,7 @@
 #include<stdio.h>
 #include<stdbool.h>
-#include<time.h>
 #include<stdlib.h>
+#include<pthread_time.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -24,7 +24,8 @@ typedef struct wsTime
 	time_t delta;
 	double deltaSecs;
 	uint16_t numFrames;
-} wsTime;
+}
+wsTime;
 
 #define max(x,y) (((x) >= (y)) ? (x) : (y))
 #define min(x,y) (((x) <= (y)) ? (x) : (y))
@@ -56,7 +57,7 @@ int main(int argc, char* argv[])
 	// Initialize game.
 	wsGame game = {};
 	wsGameInit(&game);
-	wsGameSetCameraPointers(&gfx);
+	wsGameSetCameraPointers(&gfx);	// TODO: This should be handled outside of game.c.
 	
 	// For restricting update rate for more consistent simulation.
 	wsTime time = {};
@@ -69,7 +70,8 @@ int main(int argc, char* argv[])
 		// Pre-logic-step.
 		// ------------------------------------------------------------------
 		time.deltaSecs = max(time.delta * 0.000000001, 0.0);
-		timespec_get(&time.info, TIME_UTC);
+		// timespec_get(&time.info, TIME_UTC);
+		clock_gettime(CLOCK_REALTIME, &time.info);
 		time.start = time.info.tv_nsec;
 		
 		// Poll input events through GLFW.
@@ -104,9 +106,17 @@ int main(int argc, char* argv[])
 		// ------------------------------------------------------------------
 		// Logic step.
 		// ------------------------------------------------------------------
-		if(appState == UNPAUSED)
+		switch(appState)
 		{
-			wsGameUpdateFPSCamera(time.deltaSecs);
+			case UNPAUSED: 
+				wsGameUpdateFPSCamera(time.deltaSecs);
+			
+			case REQUEST_QUIT: 
+			case REQUEST_PAUSE: 
+			case REQUEST_UNPAUSE: 
+			case PAUSED: 
+			default: 
+				break;
 		}
 		
 		// ------------------------------------------------------------------
@@ -116,13 +126,23 @@ int main(int argc, char* argv[])
 		wsVulkanDrawFrame(time.deltaSecs);
 		wsInputPostUpdate();
 		
-		if(DEBUG && time.delta < 0)
+		// Gets executed once every ~1 second.
+		if(time.delta < 0)
 		{
-			// TODO: Set window title to FPS instead of printing it.
-			printf("INFO: Time is %lld // %i fps\n", time.info.tv_sec, time.numFrames);
+			// Set window title to reflect fps.
+			char title[69];	// Nice
+			sprintf(title, "Westy Vulkan - %i fps", time.numFrames);
+			glfwSetWindowTitle(windowPtr, &title[0]);
 			time.numFrames = 0;
+
+			if(DEBUG)
+			{
+				printf("INFO: Time is %lld // %i fps\n", time.info.tv_sec, time.numFrames);
+			}
 		}
-		timespec_get(&time.info, TIME_UTC);
+
+		// timespec_get(&time.info, TIME_UTC);
+		clock_gettime(CLOCK_REALTIME, &time.info);
 		time.end = time.info.tv_nsec;
 		time.delta = (time.end - time.start);
 		time.numFrames++;
@@ -130,8 +150,8 @@ int main(int argc, char* argv[])
 	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	
 	// Program exit procedure.
-	wsCameraStop();
-	wsVulkanStop(&gfx);
+	wsCameraTerminate();
+	wsVulkanTerminate();
 	wsWindowTerminate();
 	
 	printf("===END%s===\n", DEBUG ? " DEBUG" : "");

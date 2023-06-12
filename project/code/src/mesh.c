@@ -34,7 +34,7 @@ void wsMeshInit(wsMesh* mesh_data)
     
     printf("INFO: Meshes initialized!\n");
 }
-void wsMeshStop()
+void wsMeshTerminate()
 {
     wsMeshUnload(NULL, 0);
     

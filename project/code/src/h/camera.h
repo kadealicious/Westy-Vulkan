@@ -32,7 +32,7 @@ typedef struct wsCamera
 void wsCameraInit(wsCamera* camera);	// Initialize cameras, so that we may store camera data in vulkan_interface.c for improved CPU (and potentially GPU) cache performance.
 uint8_t wsCameraCreate();				// Returns cameraID of newly created camera!
 void wsCameraDestroy(uint8_t cameraID);	// Destroys 1 (one) single (specified) camera.
-void wsCameraStop();					// Destroys all cameras!
+void wsCameraTerminate();				// Destroys all cameras!
 
 void wsCameraUpdateUBOFields(uint8_t cameraID, vec3* position, vec4* rotation, mat4* projection);
 void wsCameraUpdateProjection(uint8_t cameraID);
