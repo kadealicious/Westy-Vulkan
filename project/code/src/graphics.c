@@ -31,7 +31,7 @@ wsVulkan* vk;
 
 
 // The meaty bits.
-void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID);
+void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug);
 VkResult wsVulkanDrawFrame(double delta_time);
 void wsVulkanTerminate();
 
@@ -85,9 +85,10 @@ VkResult wsVulkanBeginSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t
 VkResult wsVulkanEndSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype);
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);
 
-uint8_t wsVulkanCreateRenderObject(const char* meshPath, const char* texPath, uint16_t texWidth, uint16_t texHeight);
-void wsVulkanCreateTexture(const char* texPath);
-void wsVulkanDestroyTexture(uint8_t texID);
+wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath);
+void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
+void wsVulkanCreateTexture(const char* texPath, wsTexture* texture);
+void wsVulkanDestroyTexture(wsTexture* texture);
 VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 // Functions for depth buffering.
@@ -125,8 +126,10 @@ uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num
 
 
 // Call after wsWindowInit().
-void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID)
+void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 {
+	wsVulkanSetDebug(isDebug);
+	
 	// Non-Vulkan-specific initialization stuff.
 	vk = vulkan_data;								// Point to program data!!!
 	vk->swapchain.framebuffer_hasresized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
@@ -136,7 +139,6 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID)
 	
 	// Non-API stuff.
 	wsMeshInit(&vk->meshbuffer);
-	// wsTextureInit(&vk->texMan);
 
 	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
 
@@ -192,7 +194,8 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID)
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	
 	// Create test render object.  TODO fix this shit.
-	uint8_t vikingRoomMeshID = wsVulkanCreateRenderObject("models/testcube.glb", "textures/bobross.png", 800, 600);
+	wsVulkanCreateTexture("textures/bobross.png", &vk->testTexture);
+	wsRenderObject* testRenderObject = wsVulkanCreateRenderObject("models/testcube.glb", "textures/bobross.png");
 
 	wsVulkanCreateTextureSampler();	// Creates a texture sampler for use with ALL textures!
 	
@@ -344,7 +347,11 @@ void wsVulkanTerminate()
 	
 	vkDestroySampler(vk->logical_device, vk->texturesampler, NULL);			printf("INFO: Vulkan texture sampler destroyed!\n");
 	
-	wsVulkanDestroyTexture(0);
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_RENDER_OBJECTS; i++)
+	{
+		wsVulkanDestroyRenderObject(&vk->renderObjects[i]);
+	}
+	wsVulkanDestroyTexture(&vk->testTexture);
 	// wsTextureUnload(NULL, 0);
 	// printf("INFO: All Vulkan textures destroyed!\n");
 	
@@ -527,27 +534,45 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 	return NONE;
 }
 
-uint8_t wsVulkanCreateRenderObject(const char* meshPath, const char* texPath, uint16_t texWidth, uint16_t texHeight)
+wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath)
 {
-	wsVulkanCreateTexture(texPath);
-	uint8_t meshID = wsMeshCreate(meshPath, 0);	// TODO: Make this ID not change when meshes are consolidated?  I forgot if it does or not.
-
-	return meshID;
-
-	// TODO: Implement destroying render objects, and keep track of which ones we currently have loaded in.
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_RENDER_OBJECTS; i++)
+	{
+		if(vk->renderObjects[i].isActive == false)
+		{
+			vk->renderObjects[i].isActive = true;
+			wsVulkanCreateTexture(texPath, &vk->renderObjects[i].texture);
+			vk->renderObjects[i].meshID = wsMeshCreate(meshPath, 0);	// TODO: Make this ID not change when meshes are consolidated?  I forgot if it does or not.
+			
+			return &vk->renderObjects[i];
+		}
+	}
+	
+	return NULL;
 }
 
-void wsVulkanCreateTexture(const char* texPath)
+void wsVulkanDestroyRenderObject(wsRenderObject* renderObject)
 {
-    wsVulkanCreateTextureImage(&vk->testImage, &vk->testMemory, texPath);
-	wsVulkanCreateImageView(&vk->testImage, &vk->testView, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+	if(renderObject->isActive)
+	{
+		renderObject->isActive = false;
+		wsVulkanDestroyTexture(&renderObject->texture);
+		// TODO: This.
+		// wsVulkanDestroyMesh(renderObject->mesh);
+	}
 }
 
-void wsVulkanDestroyTexture(uint8_t texID)
+void wsVulkanCreateTexture(const char* texPath, wsTexture* texture)
 {
-	vkDestroyImageView(vk->logical_device, vk->testView, NULL);
-	vkDestroyImage(vk->logical_device, vk->testImage, NULL);
-	vkFreeMemory(vk->logical_device, vk->testMemory, NULL);
+	wsVulkanCreateTextureImage(&texture->image, &texture->memory, texPath);
+	wsVulkanCreateImageView(&texture->image, &texture->view, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+}
+
+void wsVulkanDestroyTexture(wsTexture* texture)
+{
+	vkDestroyImageView(vk->logical_device, texture->view, NULL);
+	vkDestroyImage(vk->logical_device, texture->image, NULL);
+	vkFreeMemory(vk->logical_device, texture->memory, NULL);
 }
 
 VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
@@ -1137,7 +1162,7 @@ VkResult wsVulkanCreateDescriptorSets()
 		
 		VkDescriptorImageInfo image_info = {};
 		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		image_info.imageView = vk->testView;	// vk->texMan.texture[0].view;	// TODO: this might be fucked up idk
+		image_info.imageView = vk->testTexture.view;
 		image_info.sampler = vk->texturesampler;
 		
 		

@@ -14,7 +14,7 @@
 
 // Enables or disables debug mode.  0 == off, 1 == on.
 #define DEBUG 1
-enum WS_APP_STATES { PAUSED, UNPAUSED, REQUEST_PAUSE, REQUEST_UNPAUSE, REQUEST_QUIT };
+enum WS_APP_STATES { PAUSED, UNPAUSED, REQUEST_PAUSE, REQUEST_UNPAUSE, REQUEST_QUIT, INITIALIZE };
 
 typedef struct wsTime
 {
@@ -30,6 +30,7 @@ wsTime;
 #define max(x,y) (((x) >= (y)) ? (x) : (y))
 #define min(x,y) (((x) <= (y)) ? (x) : (y))
 void wsAppControlPauseQuit(uint8_t* appState);
+void wsAppUpdateWindowTitle(GLFWwindow* windowPtr, uint16_t* numFrames);
 void wsGLFWErrorCallback(int code, const char* description);
 
 int main(int argc, char* argv[])
@@ -39,42 +40,35 @@ int main(int argc, char* argv[])
 	// TODO: Implement these things.
 	wsAudio audio = {};
 	
-	// Initialize GLFW window.
 	wsWindow window = {};
-	wsWindowInit(&window);
-	uint8_t windowID = wsWindowCreate(640, 480);
-	GLFWwindow* windowPtr = wsWindowGetPtr(windowID);
-	
-	// Bind keyboard input to our GLFW window.
+	GLFWwindow* windowPtr;
+	uint8_t windowID;
 	wsInput input = {};
-	wsInputInit(&input, windowID, 1.0f);
-	
-	// Initialize graphics.
 	wsVulkan gfx = {};
-	wsVulkanSetDebug(DEBUG);
-	wsVulkanInit(&gfx, windowID);
-	
-	// Initialize game.
 	wsGame game = {};
+	wsTime time = {};	// Restricts update rate for more consistent simulation.
+	uint8_t appState = INITIALIZE;
+	
+	// Initialize GLFW window.
+	wsWindowInit(&window);
+	windowID = wsWindowCreate(640, 480);
+	windowPtr = wsWindowGetPtr(windowID);
+	
+	wsInputInit(&input, windowID, 1.0f);	// Bind keyboard input to our GLFW window.
+	wsVulkanInit(&gfx, windowID, DEBUG);
 	wsGameInit(&game);
 	wsGameSetCameraPointers(&gfx);	// TODO: This should be handled outside of game.c.
-	
-	// Restrict update rate for more consistent simulation.
-	wsTime time = {};
-	uint8_t appState = REQUEST_UNPAUSE;
 	
 	printf("\n===START%s RUN===\n", DEBUG ? " DEGUB" : "");
 	while(!glfwWindowShouldClose(windowPtr))
 	{
-		// ------------------------------------------------------------------
-		// Pre-logic-step.
-		// ------------------------------------------------------------------
+		// Restrict simulation update rate.
 		time.deltaSecs = max(time.delta * 0.000000001, 0.0);
 		clock_gettime(CLOCK_REALTIME, &time.info);
 		time.start = time.info.tv_nsec;
 		
-		// Poll input events through GLFW.
-		wsInputPreUpdate();		
+		// Poll input events and control app state.
+		wsInputPreUpdate();
 		wsAppControlPauseQuit(&appState);
 		
 		switch(appState)
@@ -92,35 +86,20 @@ int main(int argc, char* argv[])
 				break;
 			
 			case REQUEST_UNPAUSE: 
+			case INITIALIZE: 
 				glfwSetInputMode(windowPtr, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 				wsInputResetMouseMove();
 				break;
 			
 			case UNPAUSED: 
-			case PAUSED: 
-			default: 
-				break;
-		}
-		
-		// ------------------------------------------------------------------
-		// Logic step.
-		// ------------------------------------------------------------------
-		switch(appState)
-		{
-			case UNPAUSED: 
 				wsGameUpdateFPSCamera(time.deltaSecs);
+				break;
 			
-			case REQUEST_QUIT: 
-			case REQUEST_PAUSE: 
-			case REQUEST_UNPAUSE: 
 			case PAUSED: 
 			default: 
 				break;
 		}
 		
-		// ------------------------------------------------------------------
-		// Post-logic step.
-		// ------------------------------------------------------------------
 		wsGameUpdate(time.deltaSecs);
 		wsVulkanDrawFrame(time.deltaSecs);
 		wsInputPostUpdate();
@@ -128,16 +107,9 @@ int main(int argc, char* argv[])
 		// Gets executed once every ~1 second.
 		if(time.delta < 0)
 		{
-			// Set window title to reflect fps.
-			char title[69];	// Nice
-			sprintf(title, "Westy Vulkan - %i fps", time.numFrames);
-			glfwSetWindowTitle(windowPtr, &title[0]);
-			time.numFrames = 0;
-
+			wsAppUpdateWindowTitle(windowPtr, &time.numFrames);
 			if(DEBUG)
-			{
-				printf("INFO: Time is %lld // %i fps\n", time.info.tv_sec, time.numFrames);
-			}
+				{ printf("INFO: Time is %lld // %i fps\n", time.info.tv_sec, time.numFrames); }
 		}
 
 		clock_gettime(CLOCK_REALTIME, &time.info);
@@ -159,10 +131,20 @@ int main(int argc, char* argv[])
 void wsAppControlPauseQuit(uint8_t* appState)
 {
 	// Change pause/unpause requests into distinct "already paused" states.
-	if(*appState == REQUEST_UNPAUSE)
-		*appState = UNPAUSED;
-	if(*appState == REQUEST_PAUSE)
-		*appState = PAUSED;
+	switch(*appState)
+	{
+		case REQUEST_UNPAUSE: 
+		case INITIALIZE: 
+			*appState = UNPAUSED;
+			break;
+		
+		case REQUEST_PAUSE: 
+			*appState = PAUSED;
+			break;
+		
+		default: 
+			break;
+	}
 	
 	// Control quit behavior.
 	if(wsInputGetKeyReleaseOnce(GLFW_KEY_ESCAPE))
@@ -186,4 +168,12 @@ void wsAppControlPauseQuit(uint8_t* appState)
 			*appState = REQUEST_UNPAUSE;
 		}
 	}
+}
+
+void wsAppUpdateWindowTitle(GLFWwindow* windowPtr, uint16_t* numFrames)
+{
+	char title[69];	// Nice.
+	sprintf(title, "Westy Vulkan - %i fps",  *numFrames);
+	glfwSetWindowTitle(windowPtr, &title[0]);
+	*numFrames = 0;
 }

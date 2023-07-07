@@ -26,7 +26,7 @@ uint8_t wsTextureCreate(const char* texPath, uint16_t texWidth, uint16_t texHeig
     static uint8_t texID = 0;
 
     // TODO: i dont even know dude
-    wsVulkanCreateTexture(texPath);
+    wsVulkanCreateTexture(texPath, &texMan->texture[texID]);
 
     texMan->num_active_meshes++;
     texMan->isloaded[texID] = true;
