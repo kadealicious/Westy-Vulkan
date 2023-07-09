@@ -41,11 +41,6 @@ wsRenderObject;
 
 typedef struct wsVulkanUniformBufferObject
 {
-	// TODO: THIS
-	/*mat4 model[WS_VULKAN_MAX_DESCRIPTOR_BUFFERS];
-	mat4 view[WS_VULKAN_MAX_DESCRIPTOR_BUFFERS];
-	mat4 proj[WS_VULKAN_MAX_DESCRIPTOR_BUFFERS];*/
-	
 	mat4 model;
 	mat4 view;
 	mat4 proj;
