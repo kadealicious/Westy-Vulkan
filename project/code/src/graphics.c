@@ -26,7 +26,7 @@ enum GPU_INCOMPATIBILITY_CODES
 };
 
 
-// Contains pointer to all Vulkan data.
+// Contains pointer to all Vulkan data; instantiation happens in main.c.
 wsVulkan* vk;
 
 
@@ -53,14 +53,14 @@ void wsVulkanPopulateUniqueQueueFamiliesArray();
 uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies* indices, VkPhysicalDevice* physical_device, VkSurfaceKHR* surface);	// Finds required queue families and stores them in indices.
 bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices);	// Checks if all required queue families have been found.
 
-// Choose a physical device and set up the interfacing logical device.
+// Choose a physical device and set up a logical device for interfacing.
 bool wsVulkanPickPhysicalDevice();											// Picks the best-suited GPU for our program.
 int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device);		// Rates GPU based on device features and properties.
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);// Queries whethor or not physical_device supports required extensions.
 void wsVulkanQuerySwapChainSupport();										// Queries whether or not physical_device can support features required by Vulkan.
 VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
 
-// Low-level rendering components.
+// Did someone say swap meet?  How bazaar.
 VkResult wsVulkanCreateSwapChain();	// Creates a swap chain for image buffering.
 void wsVulkanRecreateSwapChain();	// Recreates the swap chain when it is no longer compatible with the window surface (typically on resize).
 void wsVulkanDestroySwapChain();	// Destroys swap chain.
@@ -74,9 +74,11 @@ VkResult wsVulkanCreateSurface();			// Creates a surface for drawing to the scre
 VkResult wsVulkanCreateRenderPass();		// Creates a render pass; stores inside of struct vk.
 VkResult wsVulkanCreateGraphicsPipeline();	// Creates a graphics pipeline; stores inside of struct vk.
 
+// Very useful for getting data into GPU memory for use in shaders.
 VkResult wsVulkanCreateDescriptorPool();
 VkResult wsVulkanCreateDescriptorSets();
 VkResult wsVulkanCreateDescriptorSetLayout();
+VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
 VkResult wsVulkanCreateSyncObjects();		// Creates semaphores (for GPU command execution syncing) & fence(s) (for GPU & CPU command execution syncing).
 VkResult wsVulkanCreateCommandPool();		// Create command pool for queueing commands to Vulkan.
@@ -85,30 +87,28 @@ VkResult wsVulkanBeginSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t
 VkResult wsVulkanEndSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype);
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);
 
+// Used to associate models and textures.
 wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath);
 void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
-void wsVulkanCreateTexture(const char* texPath, wsTexture* texture);
-void wsVulkanDestroyTexture(wsTexture* texture);
-VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID);	// Creates a shader module for the indicated shader.
 
-// Functions for depth buffering.
+// Depth buffering.
 VkFormat wsVulkanFindDepthFormat();
 bool wsVulkanHasStencilComponent(VkFormat format);
-VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_candidates, VkImageTiling desired_tiling, VkFormatFeatureFlags desired_features);
 VkResult wsVulkanCreateDepthResources();	// Creates depth buffer image and associated resources.
 
 // Functions for creating and handling images and their memory.
 VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags);
 VkResult wsVulkanCreateTextureSampler();
 VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path);
+VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_candidates, VkImageTiling desired_tiling, VkFormatFeatureFlags desired_features);
 void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new);
 void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
-// Buffer stuff.
+// Buffer stuffer.
 VkResult wsVulkanCopyBuffer(VkBuffer buffer_src, VkBuffer buffer_dst, VkDeviceSize size);
 VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer *buffer, VkDeviceMemory *buffer_memory);
-VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
-VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs);
+VkResult wsVulkanCreateVertexBuffer(wsMesh* mesh);
+VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh);
 VkResult wsVulkanCreateUniformBuffers();
 void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time);
 
@@ -136,9 +136,6 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	vk->windowID = windowID;																		// Specify which window we will be rendering to.
 	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
 	glfwSetFramebufferSizeCallback(wsWindowGetPtr(windowID), wsVulkanFramebufferResizeCallback);	// Allow Vulkan to resize its framebuffer when the window resizes.
-	
-	// Non-API stuff.
-	wsMeshInit(&vk->meshbuffer);
 
 	printf("\n---BEGIN VULKAN INITIALIZATION---\n");
 
@@ -174,37 +171,28 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	
 	// Sends messages to stdout when debug messages occur.
 	if(debug)
-	{
-		wsVulkanInitDebugMessenger();
-	}
+		{ wsVulkanInitDebugMessenger(); }
 	
 	wsVulkanCreateSurface();	// Creates window surface for drawing.
-	
 	wsVulkanPickPhysicalDevice();	// Physical device == GPU.
 	wsVulkanCreateLogicalDevice(create_info.enabledLayerCount, create_info.ppEnabledLayerNames);	// Logical device interfaces with physical device for us.
-	
 	wsVulkanCreateSwapChain();		// Swap chain is in charge of swapping images to the screen when they are needed.
 	wsVulkanCreateImageViews();		// Image views describe how we will use, write-to, and read each image.
 	wsVulkanCreateRenderPass();
 	wsVulkanCreateDescriptorSetLayout();
+	vk->testMesh = *wsMeshInit();
 	wsVulkanCreateGraphicsPipeline();	// Graphics pipeline combines all created objects and information into one abstraction.
 	wsVulkanCreateDepthResources();		// Create depth buffer image and memory.
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
-	
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
-	
-	// Create test render object.  TODO fix this shit.
-	wsVulkanCreateTexture("textures/bobross.png", &vk->testTexture);
-	wsRenderObject* testRenderObject = wsVulkanCreateRenderObject("models/testcube.glb", "textures/bobross.png");
-
+	vk->testTexture = *wsTextureInit(&vk->logical_device);
 	wsVulkanCreateTextureSampler();	// Creates a texture sampler for use with ALL textures!
-	
-	wsVulkanCreateVertexBuffer(NULL, 0);// Creates vertex buffers which hold our vertex input data.
-	wsVulkanCreateIndexBuffer(NULL, 0);
+	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom.glb", "textures/bobross.png");
+	wsVulkanCreateVertexBuffer(&vk->testMesh);// Creates vertex buffers which hold our vertex input data.
+	wsVulkanCreateIndexBuffer(&vk->testMesh);
 	wsVulkanCreateUniformBuffers();
 	wsVulkanCreateDescriptorPool();
 	wsVulkanCreateDescriptorSets();
-	
 	wsVulkanCreateCommandBuffers();		// Creates command buffer(s), used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects();		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
 	
@@ -312,10 +300,6 @@ VkResult wsVulkanDrawFrame(double delta_time)
 }
 void wsVulkanTerminate()
 {
-	// Stop external Westy systems that Vulkan uses.
-	wsMeshTerminate();
-	// wsTextureTerminate();
-	
 	// Wait for all asynchronous elements to finish execution and return to an idle state before continuing on.sss
 	vkDeviceWaitIdle(vk->logical_device);
 	
@@ -351,9 +335,9 @@ void wsVulkanTerminate()
 	{
 		wsVulkanDestroyRenderObject(&vk->renderObjects[i]);
 	}
-	wsVulkanDestroyTexture(&vk->testTexture);
-	// wsTextureUnload(NULL, 0);
-	// printf("INFO: All Vulkan textures destroyed!\n");
+	// wsVulkanDestroyRenderObject(&vk->testRenderObject);
+	wsTextureDestroy(&vk->testTexture);
+	wsMeshDestroy(&vk->testMesh, &vk->logical_device);
 	
 	// Free UBO, vertex, & index buffer memory.
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
@@ -362,21 +346,11 @@ void wsVulkanTerminate()
 		vkFreeMemory(vk->logical_device, vk->uniformbuffers_memory[i], NULL);
 	}
 	printf("INFO: All Vulkan UBOs destroyed!\n");
-	// These next three lines may be a double free.  I'll install Valgrind later!
-	/*free(vk->uniformbuffers);			printf("INFO: All Vulkan UBOs destroyed!\n");
-	free(vk->uniformbuffers_memory);	printf("INFO: All Vulkan UBOs' memory destroyed!\n");
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ free(vk->uniformbuffers_mapped[i]); }
-	free(vk->uniformbuffers_mapped);	printf("INFO: All Vulkan UBOs' mapped memory destroyed!\n");*/
+	// TODO: Install Valgrind to double check that I am not leaking memory here.  I don't think I am...
 
 	vkDestroyDescriptorPool(vk->logical_device, vk->descriptorpool, NULL);				printf("INFO: Vulkan descriptor pool destroyed!\n");
 	vkDestroyDescriptorSetLayout(vk->logical_device, vk->descriptorset_layout, NULL);	printf("INFO: Vulkan descriptor set layout destroyed!\n");
 	free(vk->descriptorsets);
-	
-	vkDestroyBuffer(vk->logical_device, vk->vertexbuffer, NULL);		printf("INFO: Vulkan vertex buffer destroyed!\n");
-	vkFreeMemory(vk->logical_device, vk->vertexbuffer_memory, NULL);	printf("INFO: Vulkan vertex buffer memory freed!\n");
-	vkDestroyBuffer(vk->logical_device, vk->indexbuffer, NULL);		printf("INFO: Vulkan index buffer destroyed!\n");
-	vkFreeMemory(vk->logical_device, vk->indexbuffer_memory, NULL);	printf("INFO: Vulkan index buffer memory freed!\n");
 	
 	vkDestroyRenderPass(vk->logical_device, vk->renderpass, NULL);	printf("INFO: Vulkan render pass destroyed!\n");
 	wsShaderUnloadAll(&vk->shader);
@@ -456,14 +430,41 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	scissor.extent = vk->swapchain.extent;
 	vkCmdSetScissor(*commandbuffer, 0, 1, &scissor);
 	
-	// Bind triangle information & draw!
-	VkBuffer vertexbuffers[1] = {vk->vertexbuffer};
-	VkDeviceSize offsets[1] = {0};
-	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
-	vkCmdBindIndexBuffer(*commandbuffer, vk->indexbuffer, 0, VK_INDEX_TYPE_UINT16);
+	// Bind mesh information & draw!
+	/*VkBuffer vertexBuffers[WS_VULKAN_MAX_RENDER_OBJECTS];
+	VkBuffer indexBuffers[WS_VULKAN_MAX_RENDER_OBJECTS];
+	VkDeviceSize offsets[WS_VULKAN_MAX_RENDER_OBJECTS];
+	uint8_t bufferCount = 0;
+	
+	for(uint8_t i = 0; i < WS_VULKAN_MAX_RENDER_OBJECTS; i++)
+	{
+		if(vk->renderObjects[i].isActive)
+		{
+			vertexBuffers[bufferCount] = vk->renderObjects[i].mesh.vertexBuffer;
+			indexBuffers[bufferCount] = vk->renderObjects[i].mesh.indexBuffer;
+			bufferCount++;
+			if(bufferCount < WS_VULKAN_MAX_RENDER_OBJECTS)
+				{ offsets[bufferCount] = vk->renderObjects[i].mesh.num_vertices * sizeof(wsVertex); }
+		}
+	}
+	
+	vkCmdBindVertexBuffers(*commandbuffer, 0, bufferCount, vertexBuffers, offsets);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
 		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
-	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->meshbuffer.num_indices[0], 1, 0, 0, 0);
+	
+	for(uint8_t i = 0; i < bufferCount; i++)
+	{
+		vkCmdBindIndexBuffer(*commandbuffer, indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->renderObjects[i].mesh.num_indices, 1, 0, 0, 0);
+	}*/
+	
+	VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer};
+	VkDeviceSize offsets[1] = {0};
+	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
+	vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
+		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
+	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testMesh.num_indices, 1, 0, 0, 0);
 	
 	// End render pass.
 	vkCmdEndRenderPass(*commandbuffer);
@@ -538,17 +539,20 @@ wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* tex
 {
 	for(uint8_t i = 0; i < WS_VULKAN_MAX_RENDER_OBJECTS; i++)
 	{
-		if(vk->renderObjects[i].isActive == false)
+		if(!vk->renderObjects[i].isActive)
 		{
 			vk->renderObjects[i].isActive = true;
-			wsVulkanCreateTexture(texPath, &vk->renderObjects[i].texture);
-			vk->renderObjects[i].meshID = wsMeshCreate(meshPath, 0);	// TODO: Make this ID not change when meshes are consolidated?  I forgot if it does or not.
+			wsTextureCreate(texPath, &vk->renderObjects[i].texture);
+			wsMeshCreate(meshPath, &vk->renderObjects[i].mesh);
+			
+			wsVulkanCreateVertexBuffer(&vk->renderObjects[i].mesh);// Creates vertex buffers which hold our vertex input data.
+			wsVulkanCreateIndexBuffer(&vk->renderObjects[i].mesh);
 			
 			return &vk->renderObjects[i];
 		}
 	}
 	
-	return NULL;
+	return &vk->testRenderObject;
 }
 
 void wsVulkanDestroyRenderObject(wsRenderObject* renderObject)
@@ -556,23 +560,9 @@ void wsVulkanDestroyRenderObject(wsRenderObject* renderObject)
 	if(renderObject->isActive)
 	{
 		renderObject->isActive = false;
-		wsVulkanDestroyTexture(&renderObject->texture);
-		// TODO: This.
-		// wsVulkanDestroyMesh(renderObject->mesh);
+		wsTextureDestroy(&renderObject->texture);
+		wsMeshDestroy(&renderObject->mesh, &vk->logical_device);
 	}
-}
-
-void wsVulkanCreateTexture(const char* texPath, wsTexture* texture)
-{
-	wsVulkanCreateTextureImage(&texture->image, &texture->memory, texPath);
-	wsVulkanCreateImageView(&texture->image, &texture->view, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-}
-
-void wsVulkanDestroyTexture(wsTexture* texture)
-{
-	vkDestroyImageView(vk->logical_device, texture->view, NULL);
-	vkDestroyImage(vk->logical_device, texture->image, NULL);
-	vkFreeMemory(vk->logical_device, texture->memory, NULL);
 }
 
 VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
@@ -1006,9 +996,9 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	return result;
 }
 
-VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
+VkResult wsVulkanCreateVertexBuffer(wsMesh* mesh)
 {
-	uint32_t buffer_size = wsMeshGetCurrentVertexBufferSize();
+	uint32_t buffer_size = wsMeshGetCurrentVertexBufferSize(mesh);
 	
 	// Create staging buffer for CPU (host) visibility's sake.
 	VkBuffer stagingbuffer;
@@ -1019,15 +1009,15 @@ VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 	
 	void* buffer_data;
 	vkMapMemory(vk->logical_device, stagingbuffer_memory, 0, buffer_size, 0, &buffer_data);
-		memcpy(buffer_data, wsMeshGetVerticesPtr(), (size_t)buffer_size);
+		memcpy(buffer_data, &mesh->vertices[0], (size_t)buffer_size);
 	vkUnmapMemory(vk->logical_device, stagingbuffer_memory);
 	
 	// Create actual buffer for GPU streaming.
 	result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->vertexbuffer, &vk->vertexbuffer_memory);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->vertexBuffer, &mesh->vertexBufferMemory);
 	
 	// Copy the staging buffer's data into the vertex buffer!
-	result = wsVulkanCopyBuffer(stagingbuffer, vk->vertexbuffer, buffer_size);
+	result = wsVulkanCopyBuffer(stagingbuffer, mesh->vertexBuffer, buffer_size);
 	
 	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
 	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);
@@ -1035,9 +1025,9 @@ VkResult wsVulkanCreateVertexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 	return result;
 }
 
-VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
+VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh)
 {
-	uint32_t buffer_size = wsMeshGetCurrentIndexBufferSize();
+	uint32_t buffer_size = wsMeshGetCurrentIndexBufferSize(mesh);
 	
 	// Create staging buffer for CPU (host) visibility's sake.
 	VkBuffer stagingbuffer;
@@ -1048,15 +1038,15 @@ VkResult wsVulkanCreateIndexBuffer(uint8_t* meshIDs, uint8_t num_meshIDs)
 	
 	void* buffer_data;
 	vkMapMemory(vk->logical_device, stagingbuffer_memory, 0, buffer_size, 0, &buffer_data);
-		memcpy(buffer_data, wsMeshGetIndicesPtr(), (size_t)buffer_size);
+		memcpy(buffer_data, &mesh->indices[0], (size_t)buffer_size);
 	vkUnmapMemory(vk->logical_device, stagingbuffer_memory);
 	
 	// Create actual buffer for GPU streaming.
 	result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->indexbuffer, &vk->indexbuffer_memory);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->indexBuffer, &mesh->indexBufferMemory);
 	
 	// Copy the staging buffer's data into the vertex buffer!
-	result = wsVulkanCopyBuffer(stagingbuffer, vk->indexbuffer, buffer_size);
+	result = wsVulkanCopyBuffer(stagingbuffer, mesh->indexBuffer, buffer_size);
 	
 	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
 	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);
@@ -1197,7 +1187,6 @@ VkResult wsVulkanCreateDescriptorSets()
 
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
-	// window = glfwGetWindowUserPointer(window);
 	vk->swapchain.framebuffer_hasresized = true;
 }
 
@@ -1382,12 +1371,12 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	// Configure vertex data receival info.
 	VkPipelineVertexInputStateCreateInfo vertexinput_info = {};
 	vertexinput_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	// Configure how vertices are stored and read through wsMesh.  0 is the ID of the test mesh.
-	VkVertexInputBindingDescription* binding_desc = wsMeshGetBindingDescription(0);
-	VkVertexInputAttributeDescription* attribute_desc = wsMeshGetAttributeDescriptions(0);
+	// Configure how vertices are stored and read through wsMesh.
+	VkVertexInputBindingDescription* binding_desc = &vk->testMesh.binding_descs;
+	VkVertexInputAttributeDescription* attribute_desc = &vk->testMesh.attribute_descs[0];
 	vertexinput_info.vertexBindingDescriptionCount	= 1;
 	vertexinput_info.pVertexBindingDescriptions		= binding_desc;
-	vertexinput_info.vertexAttributeDescriptionCount= wsMeshGetNumAttributeDescriptions(0);
+	vertexinput_info.vertexAttributeDescriptionCount= vk->testMesh.num_attribute_descs;
 	vertexinput_info.pVertexAttributeDescriptions	= &attribute_desc[0];
 	
 	// Configure vertex data assembly method.
@@ -1438,12 +1427,10 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	// Configure color blending attachment state for the fragment shader.
 	VkPipelineColorBlendAttachmentState colorblend_attachment = {};
 	colorblend_attachment.colorWriteMask= VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorblend_attachment.blendEnable	= VK_TRUE;	// Should we blend at all?  (Hint: yes)
-	// Color blending.
+	colorblend_attachment.blendEnable	= VK_TRUE;
 	colorblend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 	colorblend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 	colorblend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
-	// Alpha blending.
 	colorblend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 	colorblend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 	colorblend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
@@ -1477,22 +1464,17 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	// CREATE PIPELINE & LAYOUT.
 	// ---------------------
 	
-	// Specify pipeline layout creation info.
 	VkPipelineLayoutCreateInfo pipelinelayout_info = {};
 	pipelinelayout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelinelayout_info.setLayoutCount = 1;
 	pipelinelayout_info.pSetLayouts	= &vk->descriptorset_layout;
 	pipelinelayout_info.pushConstantRangeCount = 0;
 	pipelinelayout_info.pPushConstantRanges	= NULL;
-	
-	// Create pipeline layout!  If unsuccessful, say so and return the result code as an integer.
 	VkResult result = vkCreatePipelineLayout(vk->logical_device, &pipelinelayout_info, NULL, &vk->pipeline_layout);
 	wsVulkanPrint("pipeline layout creation", NONE, NONE, NONE, result);
 	
-	// Specify graphics pipeline creation info.
 	VkGraphicsPipelineCreateInfo pipeline_info = {};
 	pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	// Shader stages.
 	pipeline_info.stageCount = 2;
 	pipeline_info.pStages = &shader_stages[0];
 	pipeline_info.pVertexInputState = &vertexinput_info;
@@ -1504,15 +1486,12 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	pipeline_info.pColorBlendState = &colorblend_info;
 	pipeline_info.pDynamicState = &dynamicstate_info;
 	pipeline_info.pDepthStencilState = &depthstencil_info;
-	// Set layout.
 	pipeline_info.layout = vk->pipeline_layout;
-	// Set render pass storage location within vk struct.
 	pipeline_info.renderPass = vk->renderpass;
 	pipeline_info.subpass = 0;
 	// Specify if we should "derive" from a parent pipeline for creation.
 	pipeline_info.basePipelineHandle = NULL;
 	pipeline_info.basePipelineIndex = -1;
-	
 	result = vkCreateGraphicsPipelines(vk->logical_device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &vk->pipeline);
 	
 	// Destroy shader modules cause WE DON NEED EM NO MO

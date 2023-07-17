@@ -11,29 +11,18 @@
 
 #include"shader.h"
 #include"mesh.h"
+#include"texture.h"
 #include"camera.h"
 
 
 #define WS_VULKAN_MAX_FRAMES_IN_FLIGHT 2
 #define WS_VULKAN_MAX_VERTEX_BUFFERS 4
-#define WS_VULKAN_MAX_TEXTURES 15
 #define WS_VULKAN_MAX_DESCRIPTOR_BUFFERS 10
 #define WS_VULKAN_MAX_RENDER_OBJECTS 150
-
-
-typedef struct wsTexture
-{
-    VkImage			image;
-    VkDeviceMemory	memory;
-	VkImageView		view;
-}
-wsTexture;
 
 typedef struct wsRenderObject
 {
 	bool isActive;
-
-	uint8_t meshID;
 	wsMesh mesh;
 	wsTexture texture;
 }
@@ -113,7 +102,7 @@ typedef struct wsVulkan
 	VkCommandPool			commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
 	VkCommandBuffer*		commandbuffers;			// Buffer(s) used for recording commands to for sending to command pool.
 	
-	// 
+	// Used for feeding information to shaders.
 	VkDescriptorPool		descriptorpool;
 	VkDescriptorSet*		descriptorsets;
 	VkDescriptorSetLayout	descriptorset_layout;
@@ -127,13 +116,6 @@ typedef struct wsVulkan
 	VkDeviceMemory*	uniformbuffers_memory;
 	void**			uniformbuffers_mapped;
 
-	wsMesh meshbuffer;		// Contains all raw vertex/index data.
-	// Buffers containing all vertices & their indices.  TODO: MAKE THIS SUPPORT MULTIPLE VERTEX BUFFERS FOR PROGRESSIVE LOADING OF SCENES BASED ON DISTANCE.
-	VkBuffer		vertexbuffer;
-	VkDeviceMemory	vertexbuffer_memory;
-	VkBuffer		indexbuffer;
-	VkDeviceMemory	indexbuffer_memory;
-
 	VkSampler		texturesampler;	// Texture sampler.
 
 	// Used for depth buffering in the fragment shader stage.
@@ -143,7 +125,9 @@ typedef struct wsVulkan
 	VkImageView		depthimage_view;
 	
 	wsRenderObject renderObjects[WS_VULKAN_MAX_RENDER_OBJECTS];
+	wsRenderObject testRenderObject;
 	wsTexture testTexture;
+	wsMesh testMesh;
 	
 	wsShader shader;
 
@@ -165,8 +149,14 @@ void wsVulkanTerminate();
 
 wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath);
 void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
+
+// VkResult wsVulkanCreateVertexBuffer(wsMesh* mesh);
+// VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh);
+
 void wsVulkanCreateTexture(const char* texPath, wsTexture* texture);
 void wsVulkanDestroyTexture(wsTexture* texture);
+VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path);
+VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags);
 
 void wsVulkanSetDebug(uint8_t debug_mode);
 float wsVulkanGetAspectRatio();

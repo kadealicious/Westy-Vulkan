@@ -49,15 +49,17 @@ int main(int argc, char* argv[])
 	wsTime time = {};	// Restricts update rate for more consistent simulation.
 	uint8_t appState = INITIALIZE;
 	
+	// Set random seed so our player stats have a little flavor!
+	clock_gettime(CLOCK_REALTIME, &time.info);
+	srand(time.info.tv_nsec);
+	
 	// Initialize GLFW window.
 	wsWindowInit(&window);
 	windowID = wsWindowCreate(640, 480);
 	windowPtr = wsWindowGetPtr(windowID);
-	
 	wsInputInit(&input, windowID, 1.0f);	// Bind keyboard input to our GLFW window.
 	wsVulkanInit(&gfx, windowID, DEBUG);
-	wsGameInit(&game);
-	wsGameSetCameraPointers(&gfx);	// TODO: This should be handled outside of game.c.
+	wsGameInit(&game, &gfx);
 	
 	printf("\n===START%s RUN===\n", DEBUG ? " DEGUB" : "");
 	while(!glfwWindowShouldClose(windowPtr))
@@ -92,7 +94,7 @@ int main(int argc, char* argv[])
 				break;
 			
 			case UNPAUSED: 
-				wsGameUpdateFPSCamera(time.deltaSecs);
+				wsGameUpdatePlayerMovement(time.deltaSecs);
 				break;
 			
 			case PAUSED: 
@@ -107,9 +109,9 @@ int main(int argc, char* argv[])
 		// Gets executed once every ~1 second.
 		if(time.delta < 0)
 		{
-			wsAppUpdateWindowTitle(windowPtr, &time.numFrames);
 			if(DEBUG)
 				{ printf("INFO: Time is %lld // %i fps\n", time.info.tv_sec, time.numFrames); }
+			wsAppUpdateWindowTitle(windowPtr, &time.numFrames);
 		}
 
 		clock_gettime(CLOCK_REALTIME, &time.info);
@@ -120,7 +122,6 @@ int main(int argc, char* argv[])
 	printf("===STOP%s RUN===\n\n", DEBUG ? " DEBUG" : "");
 	
 	// Program exit procedure.
-	wsCameraTerminate();
 	wsVulkanTerminate();
 	wsWindowTerminate();
 	
