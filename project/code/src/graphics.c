@@ -187,7 +187,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	vk->testTexture = *wsTextureInit(&vk->logical_device);
 	wsVulkanCreateTextureSampler();	// Creates a texture sampler for use with ALL textures!
-	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom.glb", "textures/bobross.png");
+	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom.glb", "textures/vikingroom.png");
 	wsVulkanCreateVertexBuffer(&vk->testMesh);// Creates vertex buffers which hold our vertex input data.
 	wsVulkanCreateIndexBuffer(&vk->testMesh);
 	wsVulkanCreateUniformBuffers();
@@ -458,10 +458,10 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 		vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->renderObjects[i].mesh.num_indices, 1, 0, 0, 0);
 	}*/
 	
-	VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer};
+	VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer.buffer};
 	VkDeviceSize offsets[1] = {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
-	vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
 		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
 	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testMesh.num_indices, 1, 0, 0, 0);
@@ -542,9 +542,10 @@ wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* tex
 		if(!vk->renderObjects[i].isActive)
 		{
 			vk->renderObjects[i].isActive = true;
-			wsTextureCreate(texPath, &vk->renderObjects[i].texture);
-			wsMeshCreate(meshPath, &vk->renderObjects[i].mesh);
 			
+			wsTextureCreate(texPath, &vk->renderObjects[i].texture);
+			
+			wsMeshCreate(meshPath, &vk->renderObjects[i].mesh);
 			wsVulkanCreateVertexBuffer(&vk->renderObjects[i].mesh);// Creates vertex buffers which hold our vertex input data.
 			wsVulkanCreateIndexBuffer(&vk->renderObjects[i].mesh);
 			
@@ -1014,10 +1015,10 @@ VkResult wsVulkanCreateVertexBuffer(wsMesh* mesh)
 	
 	// Create actual buffer for GPU streaming.
 	result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->vertexBuffer, &mesh->vertexBufferMemory);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->vertexBuffer.buffer, &mesh->vertexBuffer.memory);
 	
 	// Copy the staging buffer's data into the vertex buffer!
-	result = wsVulkanCopyBuffer(stagingbuffer, mesh->vertexBuffer, buffer_size);
+	result = wsVulkanCopyBuffer(stagingbuffer, mesh->vertexBuffer.buffer, buffer_size);
 	
 	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
 	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);
@@ -1043,10 +1044,10 @@ VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh)
 	
 	// Create actual buffer for GPU streaming.
 	result = wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->indexBuffer, &mesh->indexBufferMemory);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mesh->indexBuffer.buffer, &mesh->indexBuffer.memory);
 	
 	// Copy the staging buffer's data into the vertex buffer!
-	result = wsVulkanCopyBuffer(stagingbuffer, mesh->indexBuffer, buffer_size);
+	result = wsVulkanCopyBuffer(stagingbuffer, mesh->indexBuffer.buffer, buffer_size);
 	
 	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
 	vkFreeMemory(vk->logical_device, stagingbuffer_memory, NULL);

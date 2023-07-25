@@ -150,9 +150,6 @@ void wsVulkanTerminate();
 wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath);
 void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
 
-// VkResult wsVulkanCreateVertexBuffer(wsMesh* mesh);
-// VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh);
-
 void wsVulkanCreateTexture(const char* texPath, wsTexture* texture);
 void wsVulkanDestroyTexture(wsTexture* texture);
 VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path);

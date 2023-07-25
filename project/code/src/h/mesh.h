@@ -10,22 +10,35 @@
 typedef struct wsVertex
 {
     vec3 position;
-    vec3 color;
+    vec3 normal;
 	vec2 texcoord;
 }
 wsVertex;
 
+typedef struct wsVertexBuffer
+{
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+}
+wsVertexBuffer;
+
+typedef struct wsIndexBuffer
+{
+	uint32_t indexCount;
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+}
+wsIndexBuffer;
+
 typedef struct wsMesh
 {
+	wsVertexBuffer vertexBuffer;
     wsVertex* vertices;
     uint32_t num_vertices;
+	
+	wsIndexBuffer indexBuffer;
 	uint32_t* indices;
 	uint32_t num_indices;
-    
-	VkBuffer vertexBuffer;
-	VkDeviceMemory vertexBufferMemory;
-	VkBuffer indexBuffer;
-	VkDeviceMemory indexBufferMemory;
 	
     VkVertexInputBindingDescription binding_descs;
     VkVertexInputAttributeDescription* attribute_descs;
