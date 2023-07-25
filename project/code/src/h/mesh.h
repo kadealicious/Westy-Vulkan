@@ -37,7 +37,7 @@ typedef struct wsMesh
     uint32_t num_vertices;
 	
 	wsIndexBuffer indexBuffer;
-	uint32_t* indices;
+	uint16_t* indices;
 	uint32_t num_indices;
 	
     VkVertexInputBindingDescription binding_descs;

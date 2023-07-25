@@ -187,7 +187,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
 	vk->testTexture = *wsTextureInit(&vk->logical_device);
 	wsVulkanCreateTextureSampler();	// Creates a texture sampler for use with ALL textures!
-	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom.glb", "textures/vikingroom.png");
+	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom.gltf", "textures/vikingroom.png");
 	wsVulkanCreateVertexBuffer(&vk->testMesh);// Creates vertex buffers which hold our vertex input data.
 	wsVulkanCreateIndexBuffer(&vk->testMesh);
 	wsVulkanCreateUniformBuffers();
@@ -458,10 +458,12 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 		vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->renderObjects[i].mesh.num_indices, 1, 0, 0, 0);
 	}*/
 	
+	// VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer.buffer};
 	VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer.buffer};
 	VkDeviceSize offsets[1] = {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
-	vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	// vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+	vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
 		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
 	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testMesh.num_indices, 1, 0, 0, 0);
@@ -1817,14 +1819,17 @@ uint8_t wsVulkanCountUniqueQueueIndices()
 {
 	uint8_t num_queue_families = 0;
 	
-	if(vk->queues.ndx_graphics_family == vk->queues.ndx_present_family)
-		num_queue_families++;
-	else num_queue_families += 2;
-	
-	if(vk->queues.ndx_transfer_family != vk->queues.ndx_graphics_family)
-		num_queue_families++;
+	for(uint8_t i = 0; i < 3; i++)
+	{
+		if((vk->queues.ndx_graphics_family == i) || (vk->queues.ndx_present_family == i) || (vk->queues.ndx_transfer_family == i))
+		{
+			num_queue_families++;
+			continue;
+		}
+	}
 	
 	vk->queues.num_unique_queue_families = num_queue_families;
+	
 	return num_queue_families;
 }
 
@@ -1850,6 +1855,7 @@ uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDev
 	// Get list of queue families available to us.
 	uint32_t num_queue_families = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &num_queue_families, NULL);
+	printf("INFO: Your device supports %i queue families!\n", num_queue_families);
 	
 	VkQueueFamilyProperties* queue_families = malloc(num_queue_families * sizeof(VkQueueFamilyProperties));
 	vkGetPhysicalDeviceQueueFamilyProperties(*physical_device, &num_queue_families, queue_families);
@@ -1861,32 +1867,30 @@ uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDev
 	
 	for(uint32_t i = 0; i < num_queue_families; i++)
 	{
-		// Current queue family to analyze.
 		VkQueueFamilyProperties queue_family = queue_families[i];
 		
-		// Check for graphics queue family support.
 		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT)
 		{
 			indices->ndx_graphics_family = i;
 			indices->has_graphics_family = true;
-			
+			continue;
 		}
-		if((queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT) && (i != indices->ndx_graphics_family))
+		if((queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT))
 		{
 			indices->ndx_transfer_family = i;
 			indices->has_transfer_family = true;
+			continue;
 		}
 		
-		// Check for presentation queue family support.
 		VkBool32 has_present_support = false;
 		vkGetPhysicalDeviceSurfaceSupportKHR(*physical_device, i, *surface, &has_present_support);
 		if(has_present_support)
 		{
 			indices->ndx_present_family = i;
 			indices->has_present_family = true;
+			continue;
 		}
 		
-		// If we have found all queue families, we are done searching!
 		if(wsVulkanHasFoundAllQueueFamilies(indices))
 		{
 			wsVulkanCountUniqueQueueIndices();
@@ -1895,8 +1899,16 @@ uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDev
 		}
 	}
 	
-	indices->ndx_transfer_family = indices->ndx_graphics_family;
-	indices->has_transfer_family = true;
+	if(!indices->has_transfer_family)
+	{
+		indices->ndx_transfer_family = indices->ndx_graphics_family;
+		indices->has_transfer_family = true;
+	}
+	if(!indices->has_present_family)
+	{
+		indices->ndx_present_family = indices->ndx_graphics_family;
+		indices->has_present_family = true;
+	}
 	
 	wsVulkanCountUniqueQueueIndices();
 	wsVulkanPopulateUniqueQueueFamiliesArray();

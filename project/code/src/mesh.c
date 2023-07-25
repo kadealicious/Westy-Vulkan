@@ -21,7 +21,7 @@ wsMesh* wsMeshInit()
 	/* This must be done before much of the Vulkan initialization code, as 
 		we need the attribute & binding descriptions to create an initial 
 		descriptor set. */
-	wsMeshCreate("models/cube.glb",  &meshMan.fallbackMesh);
+	wsMeshCreate("models/cube.gltf",  &meshMan.fallbackMesh);
 	return &meshMan.fallbackMesh;
 }
 
@@ -42,7 +42,9 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 	for(uint32_t i = 0; i < currentMesh->primitives_count; i++)
 	{
 		cgltf_primitive* currentPrimitive = &currentMesh->primitives[i];
-		uint8_t positionIndex, texcoordIndex, normalIndex;
+		uint8_t positionIndex;
+		uint8_t texcoordIndex;
+		uint8_t normalIndex;
 		
 		printf("Mesh's accessor indices count: %llu\n", currentPrimitive->indices->count);
 		printf("Mesh's primitive %i attribute accessor indices: \n", i);
@@ -64,34 +66,49 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 		printf("\t%i vertices, %i indices, %i triangles\n", mesh->num_vertices, mesh->num_indices, (mesh->num_indices / 3));
 		
 		mesh->vertices = (wsVertex*)malloc(mesh->num_vertices * sizeof(wsVertex));
-		mesh->indices = (uint32_t*)malloc(mesh->num_indices * sizeof(uint32_t));
+		mesh->indices = (uint16_t*)malloc(mesh->num_indices * sizeof(uint16_t));
 		
-		cgltf_accessor* accessors = data->accessors;
+		cgltf_accessor* accessors			= data->accessors;
 		cgltf_accessor* positionAccessor	= &accessors[positionIndex];
 		cgltf_accessor* texcoordAccessor	= &accessors[texcoordIndex];
 		cgltf_accessor* normalAccessor		= &accessors[normalIndex];
+		
 		cgltf_buffer_view* positionBufferView	= positionAccessor->buffer_view;
 		cgltf_buffer_view* texcoordBufferView	= texcoordAccessor->buffer_view;
 		cgltf_buffer_view* normalBufferView		= normalAccessor->buffer_view;
+		
 		cgltf_buffer* positionBuffer	= positionBufferView->buffer;
 		cgltf_buffer* texcoordBuffer	= texcoordBufferView->buffer;
 		cgltf_buffer* normalBuffer		= normalBufferView->buffer;
-		vec3* positions = (vec3*)(&positionBuffer[positionBufferView->offset + positionAccessor->offset]);
-		vec3* normals = (vec3*)(&normalBuffer[normalBufferView->offset + normalAccessor->offset]);
-		vec2* texcoords = (vec2*)(&texcoordBuffer[texcoordBufferView->offset + texcoordAccessor->offset]);
+		
+		float* positions = (float*)(positionBuffer->data + positionAccessor->offset);
+		float* normals = (float*)(normalBuffer->data + normalAccessor->offset);
+		float* texcoords = (float*)(texcoordBuffer->data + texcoordAccessor->offset);
 		
 		printf("Mesh's buffers' data: \n");
 		for(uint32_t j = 0; j < mesh->num_vertices; j++)
 		{
-			vec3 currentPosition	= {positions[j * 3][0], positions[j * 3][1], positions[j * 3][2]};
-			vec3 currentNormal		= {normals[j * 3][0], normals[j * 3][1], normals[j * 3][2]};
-			vec2 currentTexcoord	= {texcoords[j * 2][0], texcoords[j * 2][1]};
+			vec3 currentPosition	= {positions[(j * 3) + positionBufferView->stride], positions[(j * 3 + 1) + positionBufferView->stride], positions[(j * 3 + 2) + positionBufferView->stride]};
+			vec3 currentNormal		= {normals[(j * 3) + normalBufferView->stride], normals[(j * 3 + 1) + normalBufferView->stride], normals[(j * 3 + 2) + normalBufferView->stride]};
+			vec2 currentTexcoord	= {texcoords[(j * 3) + texcoordBufferView->stride], texcoords[(j * 3 + 1) + texcoordBufferView->stride]};
 			
-			printf("\tPosition\t%i: (%.2f, %.2f, %.2f)\n", j, currentPosition[0], currentPosition[1], currentPosition[2]);
-			printf("\tNormal\t%i: (%.2f, %.2f, %.2f)\n", j, currentNormal[0], currentNormal[1], currentNormal[2]);
-			printf("\tTexcoord\t%i: (%.2f, %.2f)\n", j, currentTexcoord[0], currentTexcoord[1]);
+			/*printf("\tPosition\t%i: (%.2f, %.2f, %.2f)\n", j, currentPosition[0], currentPosition[1], currentPosition[2]);
+			printf("\tNormal\t\t%i: (%.2f, %.2f, %.2f)\n", j, currentNormal[0], currentNormal[1], currentNormal[2]);
+			printf("\tTexcoord\t%i: (%.2f, %.2f)\n", j, currentTexcoord[0], currentTexcoord[1]);*/
 			
-			// mesh->vertices[j].position[0] = positionData;
+			glm_vec3_copy(currentPosition, mesh->vertices[j].position);
+			glm_vec3_copy(currentNormal, mesh->vertices[j].normal);
+			glm_vec2_copy(currentTexcoord, mesh->vertices[j].texcoord);
+		}
+		
+		cgltf_accessor* indicesAccessor = currentPrimitive->indices;
+		cgltf_buffer_view* indicesBufferView = indicesAccessor->buffer_view;
+		cgltf_buffer* indicesBuffer = indicesBufferView->buffer;
+		uint16_t* indices = (uint16_t*)(indicesBuffer->data + indicesAccessor->offset);
+		for(uint32_t j = 0; j < mesh->num_indices; j++)
+		{
+			mesh->indices[j] = indices[j + indicesBufferView->stride];
+			// printf("\tIndex\t\t%i: %i\n", j, mesh->indices[j]);
 		}
 	}
 	
@@ -99,7 +116,7 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 	cgltf_free(data);
 	
 	// Don't do or look at this.  Ever.
-	bool writesBadCode = true;
+	/*bool writesBadCode = true;
 	if(writesBadCode)
 	{
 		// Load vertices.
@@ -183,7 +200,7 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 		
 		// Load indices.  Jesus Christ.
 		mesh->num_indices = 12;
-		mesh->indices = (uint32_t*)malloc(mesh->num_indices * sizeof(uint32_t));
+		mesh->indices = (uint16_t*)malloc(mesh->num_indices * sizeof(uint16_t));
 		
 		mesh->indices[0] = 0;
 		mesh->indices[1] = 1;
@@ -200,6 +217,7 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 		mesh->indices[10] = 7;
 		mesh->indices[11] = 4;
 	}
+	*/
 	
 	// Used for creating descriptor sets for shader data transmission.
     uint8_t num_attributes = WS_MESH_MAX_ATTRIBUTE_DESCRIPTIONS;
