@@ -11,5 +11,5 @@ layout(location = 0) out vec4 out_color;
 
 void main()
 {
-    out_color = vec4(frag_normal * texture(texsampler, frag_texcoord).rgb, texture(texsampler, frag_texcoord).a);
+    out_color = vec4(texture(texsampler, frag_texcoord).rgb, texture(texsampler, frag_texcoord).a);
 }

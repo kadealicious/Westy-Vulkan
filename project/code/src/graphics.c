@@ -459,14 +459,14 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	}*/
 	
 	// VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer.buffer};
-	VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer.buffer};
+	VkBuffer vertexbuffers[1] = {vk->testRenderObject.mesh.vertexBuffer.buffer};
 	VkDeviceSize offsets[1] = {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
 	// vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
-	vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
+	vkCmdBindIndexBuffer(*commandbuffer, vk->testRenderObject.mesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
 		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
-	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testMesh.num_indices, 1, 0, 0, 0);
+	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testRenderObject.mesh.num_indices, 1, 0, 0, 0);
 	
 	// End render pass.
 	vkCmdEndRenderPass(*commandbuffer);
@@ -1155,7 +1155,7 @@ VkResult wsVulkanCreateDescriptorSets()
 		
 		VkDescriptorImageInfo image_info = {};
 		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		image_info.imageView = vk->testTexture.view;
+		image_info.imageView = vk->testRenderObject.texture.view;
 		image_info.sampler = vk->texturesampler;
 		
 		
@@ -1869,13 +1869,13 @@ uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDev
 	{
 		VkQueueFamilyProperties queue_family = queue_families[i];
 		
-		if(queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+		if((queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) && !indices->has_graphics_family)
 		{
 			indices->ndx_graphics_family = i;
 			indices->has_graphics_family = true;
 			continue;
 		}
-		if((queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT))
+		if((queue_family.queueFlags & VK_QUEUE_TRANSFER_BIT) && !indices->has_transfer_family)
 		{
 			indices->ndx_transfer_family = i;
 			indices->has_transfer_family = true;
@@ -1884,7 +1884,7 @@ uint32_t wsVulkanFindQueueFamilies(wsVulkanQueueFamilies *indices, VkPhysicalDev
 		
 		VkBool32 has_present_support = false;
 		vkGetPhysicalDeviceSurfaceSupportKHR(*physical_device, i, *surface, &has_present_support);
-		if(has_present_support)
+		if(has_present_support && !indices->has_present_family)
 		{
 			indices->ndx_present_family = i;
 			indices->has_present_family = true;
