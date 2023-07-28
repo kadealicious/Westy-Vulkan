@@ -84,47 +84,58 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 		cgltf_buffer* normalBuffer		= normalBufferView->buffer;
 		cgltf_buffer* indicesBuffer		= indicesBufferView->buffer;
 		
-		float* positions	= (float*)(positionBuffer->data	+ positionAccessor->offset	+ positionBufferView->offset);
-		float* normals		= (float*)(normalBuffer->data	+ normalAccessor->offset	+ normalBufferView->offset);
-		float* texcoords	= (float*)(texcoordBuffer->data	+ texcoordAccessor->offset	+ texcoordBufferView->offset);
-		uint16_t* indices	= (uint16_t*)(indicesBuffer->data + indicesAccessor->offset	+ indicesBufferView->offset);
+		uint32_t positionOffset	= (positionAccessor->offset + positionBufferView->offset);
+		uint32_t normalOffset	= (normalAccessor->offset + normalBufferView->offset);
+		uint32_t texcoordOffset	= (texcoordAccessor->offset + texcoordBufferView->offset);
+		uint32_t indicesOffset	= (indicesAccessor->offset + indicesBufferView->offset);
+		
+		float* positions	= (float*)(positionBuffer->data	+ positionOffset);
+		float* normals		= (float*)(normalBuffer->data	+ normalOffset);
+		float* texcoords	= (float*)(texcoordBuffer->data	+ texcoordOffset);
+		uint16_t* indices	= (uint16_t*)(indicesBuffer->data + indicesOffset);
+		
+		uint8_t positionStride	= (positionBufferView->stride + positionAccessor->stride)	/ sizeof(float);
+		uint8_t normalStride	= (normalBufferView->stride + normalAccessor->stride)		/ sizeof(float);
+		uint8_t texcoordStride	= (texcoordBufferView->stride + texcoordAccessor->stride)	/ sizeof(float);
+		uint8_t indicesStride	= (indicesBufferView->stride + indicesAccessor->stride)		/ sizeof(uint16_t);
+		
+		printf("\tBuffer offsets: %i %i %i %i\n", positionOffset, normalOffset, texcoordOffset, indicesOffset);
+		printf("\tBuffer view strides: %i %i %i %i\n", positionStride, normalStride, texcoordStride, indicesStride);
 		
 		for(uint32_t j = 0; j < mesh->num_vertices; j++)
 		{
-			uint32_t vecIndex0 = (j * 3), vecIndex1 = (j * 3) + 1, vecIndex2 = (j * 3) + 2;
-			
 			vec3 currentPosition = 
 			{
-				positions[vecIndex0 + positionBufferView->stride], 
-				positions[vecIndex1 + positionBufferView->stride], 
-				positions[vecIndex2 + positionBufferView->stride]
+				positions[(j * positionStride)], 
+				positions[(j * positionStride) + 1], 
+				positions[(j * positionStride) + 2]
 			};
 			vec3 currentNormal = 
 			{
-				normals[vecIndex0 + normalBufferView->stride], 
-				normals[vecIndex1 + normalBufferView->stride], 
-				normals[vecIndex2 + normalBufferView->stride]
+				normals[(j * normalStride)], 
+				normals[(j * normalStride) + 1], 
+				normals[(j * normalStride) + 2]
 			};
 			vec2 currentTexcoord = 
 			{
-				texcoords[vecIndex0 + texcoordBufferView->stride], 
-				texcoords[vecIndex1 + texcoordBufferView->stride]
+				texcoords[(j * texcoordStride)], 
+				texcoords[(j * texcoordStride) + 1]
 			};
 			
 			glm_vec3_copy(currentPosition, mesh->vertices[j].position);
 			glm_vec3_copy(currentNormal, mesh->vertices[j].normal);
 			glm_vec2_copy(currentTexcoord, mesh->vertices[j].texcoord);
 			
-			printf("\tPosition\t%i: (%.2f, %.2f, %.2f)\n", j, currentPosition[0], currentPosition[1], currentPosition[2]);
-			printf("\tNormal\t\t%i: (%.2f, %.2f, %.2f)\n", j, currentNormal[0], currentNormal[1], currentNormal[2]);
-			printf("\tTexcoord\t%i: (%.2f, %.2f)\n", j, currentTexcoord[0], currentTexcoord[1]);
+			// printf("\tPosition\t%i: (%.2f, %.2f, %.2f)\n", j, currentPosition[0], currentPosition[1], currentPosition[2]);
+			// printf("\tNormal\t\t%i: (%.2f, %.2f, %.2f)\n", j, currentNormal[0], currentNormal[1], currentNormal[2]);
+			// printf("\tTexcoord\t%i: (%.2f, %.2f)\n", j, currentTexcoord[0], currentTexcoord[1]);
 		}
 		
 		for(uint32_t j = 0; j < mesh->num_indices; j++)
 		{
-			mesh->indices[j] = indices[j + indicesBufferView->stride];
+			mesh->indices[j] = indices[j * indicesStride];
 			
-			printf("\tIndex\t\t%i: %i\n", j, mesh->indices[j]);
+			// printf("\tIndex\t\t%i: %i\n", j, mesh->indices[j]);
 		}
 	}
 	

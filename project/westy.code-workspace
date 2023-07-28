@@ -6,7 +6,10 @@
 	],
 	"settings": {
 		"files.associations": {
-			"cgltf.h": "c"
+			"cgltf.h": "c",
+			"stdbool.h": "c",
+			"vulkan.h": "c",
+			"glfw3.h": "c"
 		}
 	}
 }

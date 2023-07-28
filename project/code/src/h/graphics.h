@@ -15,10 +15,18 @@
 #include"camera.h"
 
 
-#define WS_VULKAN_MAX_FRAMES_IN_FLIGHT 2
-#define WS_VULKAN_MAX_VERTEX_BUFFERS 4
-#define WS_VULKAN_MAX_DESCRIPTOR_BUFFERS 10
-#define WS_VULKAN_MAX_RENDER_OBJECTS 150
+#define WS_MAX_FRAMES_IN_FLIGHT 2
+#define WS_MAX_VERTEX_BUFFERS 4
+#define WS_MAX_DESCRIPTOR_BUFFERS 10
+#define WS_MAX_RENDER_OBJECTS 150
+
+#define WS_XAXIS_INIT	{1.0f, 0.0f, 0.0f}
+#define WS_YAXIS_INIT	{0.0f, 1.0f, 0.0f}
+#define WS_ZAXIS_INIT	{0.0f, 0.0f, 1.0f}
+#define WS_XAXIS		((vec3)WS_XAXIS_INIT)
+#define WS_YAXIS		((vec3)WS_YAXIS_INIT)
+#define WS_ZAXIS		((vec3)WS_ZAXIS_INIT)
+
 
 typedef struct wsRenderObject
 {
@@ -124,7 +132,7 @@ typedef struct wsVulkan
 	VkDeviceMemory	depthimage_memory;
 	VkImageView		depthimage_view;
 	
-	wsRenderObject renderObjects[WS_VULKAN_MAX_RENDER_OBJECTS];
+	wsRenderObject renderObjects[WS_MAX_RENDER_OBJECTS];
 	wsRenderObject testRenderObject;
 	wsTexture testTexture;
 	wsMesh testMesh;

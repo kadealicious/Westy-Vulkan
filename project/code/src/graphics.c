@@ -294,7 +294,7 @@ VkResult wsVulkanDrawFrame(double delta_time)
 	}
 	
 	// Loop around to the next frame in the swapchain.
-	vk->swapchain.current_frame = (vk->swapchain.current_frame + 1) % WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	vk->swapchain.current_frame = (vk->swapchain.current_frame + 1) % WS_MAX_FRAMES_IN_FLIGHT;
 	
 	return VK_SUCCESS;
 }
@@ -311,12 +311,12 @@ void wsVulkanTerminate()
 	}
 	
 	// Destroy all sync objects.
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ vkDestroySemaphore(vk->logical_device, vk->img_available_semaphores[i], NULL);	printf("INFO: Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT); }
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ vkDestroySemaphore(vk->logical_device, vk->render_finish_semaphores[i], NULL);	printf("INFO: Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT); }
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ vkDestroyFence(vk->logical_device, vk->inflight_fences[i], NULL);					printf("INFO: Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT); }
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
+		{ vkDestroySemaphore(vk->logical_device, vk->img_available_semaphores[i], NULL);	printf("INFO: Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), WS_MAX_FRAMES_IN_FLIGHT); }
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
+		{ vkDestroySemaphore(vk->logical_device, vk->render_finish_semaphores[i], NULL);	printf("INFO: Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), WS_MAX_FRAMES_IN_FLIGHT); }
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
+		{ vkDestroyFence(vk->logical_device, vk->inflight_fences[i], NULL);					printf("INFO: Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), WS_MAX_FRAMES_IN_FLIGHT); }
 	
 	// Free memory associated with queue families.
 	free(vk->queues.unique_queue_family_indices);
@@ -331,7 +331,7 @@ void wsVulkanTerminate()
 	
 	vkDestroySampler(vk->logical_device, vk->texturesampler, NULL);			printf("INFO: Vulkan texture sampler destroyed!\n");
 	
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_RENDER_OBJECTS; i++)
+	for(uint8_t i = 0; i < WS_MAX_RENDER_OBJECTS; i++)
 	{
 		wsVulkanDestroyRenderObject(&vk->renderObjects[i]);
 	}
@@ -340,7 +340,7 @@ void wsVulkanTerminate()
 	wsMeshDestroy(&vk->testMesh, &vk->logical_device);
 	
 	// Free UBO, vertex, & index buffer memory.
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		vkDestroyBuffer(vk->logical_device, vk->uniformbuffers[i], NULL);
 		vkFreeMemory(vk->logical_device, vk->uniformbuffers_memory[i], NULL);
@@ -364,9 +364,9 @@ void wsVulkanTerminate()
 VkResult wsVulkanCreateSyncObjects()
 {
 	// Resize arrays to hold all required semaphores & fences.
-	vk->img_available_semaphores= malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
-	vk->render_finish_semaphores= malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
-	vk->inflight_fences			= malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkFence));
+	vk->img_available_semaphores= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->render_finish_semaphores= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->inflight_fences			= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkFence));
 	
 	VkSemaphoreCreateInfo semaphore_info = {};
 	semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -376,12 +376,12 @@ VkResult wsVulkanCreateSyncObjects()
 	fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;		// Prevents first call to wsVulkanDrawFrame() from hanging up on an unsignaled fence.
 	
 	// Create all semaphores & fences!
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);	wsVulkanPrint("\"image available?\" semaphore creation", NONE, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);	wsVulkanPrint("\"render finished?\" semaphore creation", NONE, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);	wsVulkanPrint("\"in flight?\" semaphore creation", NONE, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result); }
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
+		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->img_available_semaphores[i]);	wsVulkanPrint("\"image available?\" semaphore creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result); }
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
+		{ VkResult result = vkCreateSemaphore(vk->logical_device, &semaphore_info, NULL, &vk->render_finish_semaphores[i]);	wsVulkanPrint("\"render finished?\" semaphore creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result); }
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
+		{ VkResult result = vkCreateFence(vk->logical_device, &fence_info, NULL, &vk->inflight_fences[i]);	wsVulkanPrint("\"in flight?\" semaphore creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result); }
 	
 	return VK_SUCCESS;
 }
@@ -431,44 +431,14 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	vkCmdSetScissor(*commandbuffer, 0, 1, &scissor);
 	
 	// Bind mesh information & draw!
-	/*VkBuffer vertexBuffers[WS_VULKAN_MAX_RENDER_OBJECTS];
-	VkBuffer indexBuffers[WS_VULKAN_MAX_RENDER_OBJECTS];
-	VkDeviceSize offsets[WS_VULKAN_MAX_RENDER_OBJECTS];
-	uint8_t bufferCount = 0;
-	
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_RENDER_OBJECTS; i++)
-	{
-		if(vk->renderObjects[i].isActive)
-		{
-			vertexBuffers[bufferCount] = vk->renderObjects[i].mesh.vertexBuffer;
-			indexBuffers[bufferCount] = vk->renderObjects[i].mesh.indexBuffer;
-			bufferCount++;
-			if(bufferCount < WS_VULKAN_MAX_RENDER_OBJECTS)
-				{ offsets[bufferCount] = vk->renderObjects[i].mesh.num_vertices * sizeof(wsVertex); }
-		}
-	}
-	
-	vkCmdBindVertexBuffers(*commandbuffer, 0, bufferCount, vertexBuffers, offsets);
-	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
-		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
-	
-	for(uint8_t i = 0; i < bufferCount; i++)
-	{
-		vkCmdBindIndexBuffer(*commandbuffer, indexBuffers[i], 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->renderObjects[i].mesh.num_indices, 1, 0, 0, 0);
-	}*/
-	
-	// VkBuffer vertexbuffers[1] = {vk->testMesh.vertexBuffer.buffer};
 	VkBuffer vertexbuffers[1] = {vk->testRenderObject.mesh.vertexBuffer.buffer};
 	VkDeviceSize offsets[1] = {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
-	// vkCmdBindIndexBuffer(*commandbuffer, vk->testMesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdBindIndexBuffer(*commandbuffer, vk->testRenderObject.mesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline_layout, 
 		0, 1, &vk->descriptorsets[vk->swapchain.current_frame], 0, NULL);
 	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testRenderObject.mesh.num_indices, 1, 0, 0, 0);
 	
-	// End render pass.
 	vkCmdEndRenderPass(*commandbuffer);
 	
 	// End command buffer recording.
@@ -480,20 +450,20 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 VkResult wsVulkanCreateCommandBuffers()
 {
 	// Resize command buffers array to contain enough command buffers for each in-flight frame.
-	vk->commandbuffers = malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkCommandBuffer));
+	vk->commandbuffers = malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkCommandBuffer));
 	
 	// Specify command buffer allocation configuration.
 	VkCommandBufferAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	alloc_info.commandPool = vk->commandpool_graphics;
 	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	alloc_info.commandBufferCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	alloc_info.commandBufferCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
 	
 	// Allocate all command buffers.
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		VkResult result = vkAllocateCommandBuffers(vk->logical_device, &alloc_info, vk->commandbuffers);
-		wsVulkanPrint("command buffer creation", NONE, (i + 1), WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
+		wsVulkanPrint("command buffer creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result);
 	}
 	
 	return VK_SUCCESS;
@@ -539,7 +509,7 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 
 wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath)
 {
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_RENDER_OBJECTS; i++)
+	for(uint8_t i = 0; i < WS_MAX_RENDER_OBJECTS; i++)
 	{
 		if(!vk->renderObjects[i].isActive)
 		{
@@ -1060,14 +1030,14 @@ VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh)
 VkResult wsVulkanCreateUniformBuffers()
 {
 	VkDeviceSize buffer_size = sizeof(wsVulkanUBO);
-	vk->uniformbuffers			= (VkBuffer*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkBuffer));
-	vk->uniformbuffers_memory	= (VkDeviceMemory*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkDeviceMemory));
-	vk->uniformbuffers_mapped	= (void**)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(void*));
+	vk->uniformbuffers			= (VkBuffer*)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkBuffer));
+	vk->uniformbuffers_memory	= (VkDeviceMemory*)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkDeviceMemory));
+	vk->uniformbuffers_mapped	= (void**)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(void*));
 	
 	
 	VkResult result;
 	
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		wsVulkanCreateBuffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vk->uniformbuffers[i], &vk->uniformbuffers_memory[i]);
@@ -1076,7 +1046,7 @@ VkResult wsVulkanCreateUniformBuffers()
 		// vk->uniformbuffers_mapped[i] = (void*)malloc(buffer_size);
 		result = vkMapMemory(vk->logical_device, vk->uniformbuffers_memory[i], 0, buffer_size, 0, &vk->uniformbuffers_mapped[i]);
 		
-		wsVulkanPrintQuiet("uniform buffer creation", NONE, (int32_t)i, (int32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT, result);
+		wsVulkanPrintQuiet("uniform buffer creation", NONE, (int32_t)i, (int32_t)WS_MAX_FRAMES_IN_FLIGHT, result);
 	}
 	
 	wsVulkanPrint("uniform buffer creation", NONE, NONE, NONE, result);
@@ -1088,11 +1058,11 @@ void wsVulkanUpdateUniformBuffer(uint32_t current_frame, double delta_time)
 	wsVulkanUBO ubo = {};
 	
 	// Model matrix.
-	vec3 rotation_axis = {0.0f, 0.0f, 1.0f};
-	static float rotation_amount = 0.0f;
-	rotation_amount += delta_time;
+	// static float rotation_amount = 0.0f;
+	// rotation_amount += (delta_time / 15.0f);
 	glm_mat4_copy(GLM_MAT4_IDENTITY, ubo.model);
-	glm_rotate(ubo.model, sinf(rotation_amount), rotation_axis);
+	glm_rotate(ubo.model, M_PI, WS_XAXIS);
+	glm_rotate(ubo.model, M_PI_2, WS_YAXIS);
 	
 	// View matrix.
 	vec3 cameraTarget = GLM_VEC3_ZERO_INIT;
@@ -1110,15 +1080,15 @@ VkResult wsVulkanCreateDescriptorPool()
 {
 	VkDescriptorPoolSize pool_sizes[2] = {};
 	pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	pool_sizes[0].descriptorCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	pool_sizes[0].descriptorCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
 	pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	pool_sizes[1].descriptorCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	pool_sizes[1].descriptorCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
 	
 	VkDescriptorPoolCreateInfo pool_info = {};
 	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	pool_info.poolSizeCount = 2;
 	pool_info.pPoolSizes = &pool_sizes[0];
-	pool_info.maxSets = WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	pool_info.maxSets = WS_MAX_FRAMES_IN_FLIGHT;
 	pool_info.flags = 0;	// Optional.
 	
 	VkResult result = vkCreateDescriptorPool(vk->logical_device, &pool_info, NULL, &vk->descriptorpool);
@@ -1128,17 +1098,17 @@ VkResult wsVulkanCreateDescriptorPool()
 
 VkResult wsVulkanCreateDescriptorSets()
 {
-	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSetLayout));
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSetLayout));
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
 		{ memcpy(&layouts[i], &vk->descriptorset_layout, sizeof(VkDescriptorSetLayout)); }
 	
 	VkDescriptorSetAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	alloc_info.descriptorPool = vk->descriptorpool;
-	alloc_info.descriptorSetCount = (uint32_t)WS_VULKAN_MAX_FRAMES_IN_FLIGHT;
+	alloc_info.descriptorSetCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
 	alloc_info.pSetLayouts = &layouts[0];
 	
-	vk->descriptorsets = (VkDescriptorSet*)malloc(WS_VULKAN_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSet));
+	vk->descriptorsets = (VkDescriptorSet*)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSet));
 	
 	VkResult result = vkAllocateDescriptorSets(vk->logical_device, &alloc_info, &vk->descriptorsets[0]);
 	wsVulkanPrint("descriptor set allocation", NONE, NONE, NONE, result);
@@ -1146,7 +1116,7 @@ VkResult wsVulkanCreateDescriptorSets()
 		{ return result; }
 	free(layouts);	// Causes crash?  Maybe!
 	
-	for(uint8_t i = 0; i < WS_VULKAN_MAX_FRAMES_IN_FLIGHT; i++)
+	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		VkDescriptorBufferInfo buffer_info = {};
 		buffer_info.buffer = vk->uniformbuffers[i];
