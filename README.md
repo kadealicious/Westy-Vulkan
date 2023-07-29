@@ -18,7 +18,6 @@ Created by:	**Kade Samson**
 ### Pipeline
 - Dynamic state window scissor for faster framebuffer & swapchain recreation.
 - Rasterization-based pipeline, raytraced pipeline in-progress.
-- Uses single descriptor set to reduce frame time.
 - Sample rate shading support to mitigate any aliasing caused by fragment shader artifacting.
 - MSAA support for up to 64 samples.
 
