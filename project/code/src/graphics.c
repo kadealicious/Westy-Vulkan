@@ -58,6 +58,7 @@ bool wsVulkanHasFoundAllQueueFamilies(wsVulkanQueueFamilies* indices);	// Checks
 bool wsVulkanPickPhysicalDevice();											// Picks the best-suited GPU for our program.
 int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physical_device);		// Rates GPU based on device features and properties.
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device);// Queries whethor or not physical_device supports required extensions.
+VkSampleCountFlagBits wsVulkanGetMaxMSAASampleCount();					// Used for querying MSAA support.
 void wsVulkanQuerySwapChainSupport();										// Queries whether or not physical_device can support features required by Vulkan.
 VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char* const* validation_layers);	// Creates a logical device for interfacing with the GPU.
 
@@ -95,7 +96,8 @@ void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
 // Depth buffering.
 VkFormat wsVulkanFindDepthFormat();
 bool wsVulkanHasStencilComponent(VkFormat format);
-VkResult wsVulkanCreateDepthResources();	// Creates depth buffer image and associated resources.
+VkResult wsVulkanCreateColorResources();
+VkResult wsVulkanCreateDepthResources();
 
 // Functions for creating and handling images and their memory.
 VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mipLevels);
@@ -133,6 +135,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	
 	// Non-Vulkan-specific initialization stuff.
 	vk = vulkan_data;								// Point to program data!!!
+	vk->MSAASampleCount = VK_SAMPLE_COUNT_1_BIT;
 	vk->swapchain.framebuffer_hasresized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
 	vk->windowID = windowID;																		// Specify which window we will be rendering to.
 	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
@@ -183,6 +186,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	wsVulkanCreateDescriptorSetLayout();
 	vk->testMesh = *wsMeshInit();
 	wsVulkanCreateGraphicsPipeline();	// Graphics pipeline combines all created objects and information into one abstraction.
+	wsVulkanCreateColorResources();
 	wsVulkanCreateDepthResources();		// Create depth buffer image and memory.
 	wsVulkanCreateFrameBuffers();		// Creates framebuffer objects for interfacing with image view attachments.
 	wsVulkanCreateCommandPool();		// Creates command pools, which are used for executing commands sent via command buffer.
@@ -409,8 +413,8 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	
 	VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
 	VkClearValue clear_depth = {{{1.0f, 0}}};
-	VkClearValue clear_values[2] = {clear_color, clear_depth};
-	renderpass_info.clearValueCount = 2;
+	VkClearValue clear_values[3] = {clear_color, clear_color, clear_depth};
+	renderpass_info.clearValueCount = 3;
 	renderpass_info.pClearValues = &clear_values[0];
 	
 	vkCmdBeginRenderPass(*commandbuffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
@@ -543,7 +547,7 @@ void wsVulkanDestroyRenderObject(wsRenderObject* renderObject)
 	}
 }
 
-VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
+VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits MSAASamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
 {
 	// Initialize VkImage inside of struct vk.
 	VkImageCreateInfo image_info = {};
@@ -559,7 +563,7 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels
 	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	image_info.usage = usage;
 	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	image_info.samples = MSAASamples;
 	image_info.flags = 0;	// Optional.
 	VkResult result = vkCreateImage(vk->logical_device, &image_info, NULL, image);
 	wsVulkanPrint("image creation", (uintptr_t)image, NONE, NONE, result);
@@ -609,7 +613,7 @@ VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
 	stbi_image_free(pixel_data);
 	
 	// Create the image!
-	VkResult result = wsVulkanCreateImage(tex_width, tex_height, texture->mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
+	VkResult result = wsVulkanCreateImage(tex_width, tex_height, texture->mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
 											VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
 											VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &texture->image, &texture->memory);
 	wsVulkanPrint("image memory binding", NONE, NONE, NONE, result);
@@ -957,13 +961,25 @@ VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_cand
 	return format;
 }
 
+VkResult wsVulkanCreateColorResources()
+{
+	VkFormat colorFormat = vk->swapchain.image_format;
+	
+	VkResult result = wsVulkanCreateImage(vk->swapchain.extent.width, vk->swapchain.extent.height, 1, vk->MSAASampleCount, colorFormat, 
+											VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
+											VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->colorTexture.image, &vk->colorTexture.memory);
+	result = wsVulkanCreateImageView(&vk->colorTexture.image, &vk->colorTexture.view, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+	
+	return result;
+}
+
 VkResult wsVulkanCreateDepthResources()
 {
-	VkFormat depth_format = wsVulkanFindDepthFormat();
-	VkResult result = wsVulkanCreateImage(vk->swapchain.extent.width, vk->swapchain.extent.height, 1, depth_format, VK_IMAGE_TILING_OPTIMAL, 
+	VkFormat depthFormat = wsVulkanFindDepthFormat();
+	VkResult result = wsVulkanCreateImage(vk->swapchain.extent.width, vk->swapchain.extent.height, 1, vk->MSAASampleCount, depthFormat, VK_IMAGE_TILING_OPTIMAL, 
 											VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->depthimage, 
 											&vk->depthimage_memory);
-	result = wsVulkanCreateImageView(&vk->depthimage, &vk->depthimage_view, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+	result = wsVulkanCreateImageView(&vk->depthimage, &vk->depthimage_view, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	
 	return result;
 }
@@ -1274,13 +1290,13 @@ VkResult wsVulkanCreateFrameBuffers()
 	VkResult result;
 	vk->swapchain.framebuffers = malloc(vk->swapchain.num_images * sizeof(VkFramebuffer));
 	
-	for(int i = 0; i < vk->swapchain.num_images; i++) {
-		VkImageView attachments[2] = {vk->swapchain.image_views[i], vk->depthimage_view};
-		
+	for(int i = 0; i < vk->swapchain.num_images; i++)
+	{
 		VkFramebufferCreateInfo framebuffer_info = {};
 		framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebuffer_info.renderPass = vk->renderpass;
-		framebuffer_info.attachmentCount = 2;
+		framebuffer_info.attachmentCount = 3;
+		VkImageView attachments[3] = {vk->colorTexture.view, vk->swapchain.image_views[i], vk->depthimage_view};
 		framebuffer_info.pAttachments = attachments;
 		framebuffer_info.width = vk->swapchain.extent.width;
 		framebuffer_info.height = vk->swapchain.extent.height;
@@ -1298,24 +1314,36 @@ VkResult wsVulkanCreateFrameBuffers()
 
 VkResult wsVulkanCreateRenderPass()
 {
-	// Specify color attachment details for render pass object.
 	VkAttachmentDescription color_attachment = {};
 	color_attachment.format	= vk->swapchain.image_format;
-	color_attachment.samples= VK_SAMPLE_COUNT_1_BIT;
+	color_attachment.samples= vk->MSAASampleCount;
 	color_attachment.loadOp	= VK_ATTACHMENT_LOAD_OP_CLEAR;
 	color_attachment.storeOp= VK_ATTACHMENT_STORE_OP_STORE;
 	color_attachment.stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	color_attachment.stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	color_attachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
-	color_attachment.finalLayout	= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	color_attachment.finalLayout	= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	VkAttachmentReference colorattachment_reference = {};
 	colorattachment_reference.attachment= 0;
 	colorattachment_reference.layout	= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	
-	// Everybody likes depth buffering!
+	// Necessary for resolving the multisampled color buffer into a format which is presentable.
+	VkAttachmentDescription colorAttachmentResolve = {};
+	colorAttachmentResolve.format = vk->swapchain.image_format;
+	colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+	colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	VkAttachmentReference colorAttachmentResolveReference = {};
+	colorAttachmentResolveReference.attachment = 1;
+	colorAttachmentResolveReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	
 	VkAttachmentDescription depth_attachment = {};
 	depth_attachment.format = wsVulkanFindDepthFormat();
-	depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	depth_attachment.samples = vk->MSAASampleCount;
 	depth_attachment.loadOp	= VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depth_attachment.storeOp= VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	depth_attachment.stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1323,21 +1351,21 @@ VkResult wsVulkanCreateRenderPass()
 	depth_attachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
 	depth_attachment.finalLayout	= VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 	VkAttachmentReference depthattachment_reference = {};
-	depthattachment_reference.attachment = 1;
+	depthattachment_reference.attachment = 2;
 	depthattachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 	
-	// Subpass time B-)
 	VkSubpassDescription subpass_desc = {};
 	subpass_desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	subpass_desc.colorAttachmentCount = 1;
 	subpass_desc.pColorAttachments = &colorattachment_reference;
+	subpass_desc.pResolveAttachments = &colorAttachmentResolveReference;
 	subpass_desc.pDepthStencilAttachment = &depthattachment_reference;
 	
 	// Create render pass!
 	VkRenderPassCreateInfo renderpass_info = {};
 	renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderpass_info.attachmentCount = 2;
-	VkAttachmentDescription attachments[2] = {color_attachment, depth_attachment};
+	renderpass_info.attachmentCount = 3;
+	VkAttachmentDescription attachments[3] = {color_attachment, colorAttachmentResolve, depth_attachment};
 	renderpass_info.pAttachments = &attachments[0];
 	renderpass_info.subpassCount= 1;
 	renderpass_info.pSubpasses	= &subpass_desc;
@@ -1496,7 +1524,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	VkPipelineMultisampleStateCreateInfo multisampling_info = {};
 	multisampling_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling_info.sampleShadingEnable	= VK_FALSE;
-	multisampling_info.rasterizationSamples	= VK_SAMPLE_COUNT_1_BIT;
+	multisampling_info.rasterizationSamples	= vk->MSAASampleCount;
 	multisampling_info.minSampleShading		= 1.0f;
 	multisampling_info.pSampleMask = NULL;
 	multisampling_info.alphaToCoverageEnable = VK_FALSE;
@@ -1680,6 +1708,7 @@ void wsVulkanRecreateSwapChain()
 	wsVulkanDestroySwapChain();
 	wsVulkanCreateSwapChain();
 	wsVulkanCreateImageViews();
+	wsVulkanCreateColorResources();
 	wsVulkanCreateDepthResources();
 	wsVulkanCreateFrameBuffers();
 }
@@ -1691,6 +1720,8 @@ void wsVulkanDestroySwapChain()
 		{ vkDestroyFramebuffer(vk->logical_device, vk->swapchain.framebuffers[i], NULL); }
 	free(vk->swapchain.framebuffers);
 	printf("INFO: Vulkan framebuffers destroyed!\n");
+	
+	wsTextureDestroy(&vk->colorTexture);
 	
 	// Destroy depth buffer.
 	vkDestroyImageView(vk->logical_device, vk->depthimage_view, NULL);
@@ -1999,7 +2030,7 @@ bool wsVulkanPickPhysicalDevice()
 	
 	if(num_GPUs <= 0)
 	{
-		printf("WARNING: Vulkan alleges your system has no GPUs installed...  How are you even seeing this...\n");
+		printf("WARNING: Vulkan alleges your system has no GPUs installed...  You should get that looked at.\n");
 		return false;
 	}
 	
@@ -2033,6 +2064,7 @@ bool wsVulkanPickPhysicalDevice()
 	if(max_score != -1)
 	{
 		vk->physical_device = GPUs[ndx_GPU];
+		vk->MSAASampleCount = wsVulkanGetMaxMSAASampleCount();
 		
 		// TODO: Make this list the properties of chosen GPU.
 		VkPhysicalDeviceProperties device_properties;
@@ -2042,6 +2074,7 @@ bool wsVulkanPickPhysicalDevice()
 		printf("\tDevice type: %i\n", device_properties.deviceType);
 		printf("\tDriver version: %i\n", device_properties.driverVersion);
 		printf("\tVendor ID: %i\n", device_properties.vendorID);
+		printf("\tMax MSAA Sample Count: %i\n", vk->MSAASampleCount);
 
 		return true;
 	}
@@ -2148,6 +2181,22 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physical_device)
 	printf("\tAll required device-specific Vulkan extensions are supported by your GPU!\n");
 
 	return true;
+}
+
+VkSampleCountFlagBits wsVulkanGetMaxMSAASampleCount()
+{
+	VkPhysicalDeviceProperties deviceProperties;
+	vkGetPhysicalDeviceProperties(vk->physical_device, &deviceProperties);
+	
+	VkSampleCountFlags flagCounts = deviceProperties.limits.framebufferColorSampleCounts & deviceProperties.limits.framebufferDepthSampleCounts;
+	if(flagCounts & VK_SAMPLE_COUNT_64_BIT)	{return VK_SAMPLE_COUNT_64_BIT;}
+	if(flagCounts & VK_SAMPLE_COUNT_32_BIT)	{return VK_SAMPLE_COUNT_32_BIT;}
+	if(flagCounts & VK_SAMPLE_COUNT_16_BIT)	{return VK_SAMPLE_COUNT_16_BIT;}
+	if(flagCounts & VK_SAMPLE_COUNT_8_BIT)	{return VK_SAMPLE_COUNT_8_BIT;}
+	if(flagCounts & VK_SAMPLE_COUNT_4_BIT)	{return VK_SAMPLE_COUNT_4_BIT;}
+	if(flagCounts & VK_SAMPLE_COUNT_2_BIT)	{return VK_SAMPLE_COUNT_2_BIT;}
+	
+	return VK_SAMPLE_COUNT_1_BIT;
 }
 
 VkResult wsVulkanInitDebugMessenger()

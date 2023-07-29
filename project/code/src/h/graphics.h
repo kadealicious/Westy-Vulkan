@@ -94,12 +94,13 @@ wsVulkanSwapChain;
 
 typedef struct wsVulkan
 {
-	VkInstance				 instance;			// Main Vulkan instance.
+	VkInstance				 instance;
 	VkPhysicalDevice		 physical_device;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
-	VkDevice				 logical_device;	// Primary logical device used to interface with the physical device.
-	VkDebugUtilsMessengerEXT debug_messenger;	// Main debug messenger.
+	VkDevice				 logical_device;
+	VkDebugUtilsMessengerEXT debug_messenger;
 	
 	wsVulkanSwapChain	swapchain;
+	VkCommandBuffer*	commandbuffers;			// Swapchain command buffers.  TODO: Move this into wsVulkanSwapChain.
 	VkSurfaceKHR		surface;
 	VkPipeline			pipeline;
 	VkPipelineLayout	pipeline_layout;
@@ -108,7 +109,6 @@ typedef struct wsVulkan
 	wsVulkanQueueFamilies	queues;					// Contains all queue data.
 	VkCommandPool			commandpool_graphics;	// Pool for sending graphics/presentation commands to Vulkan for execution.
 	VkCommandPool			commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
-	VkCommandBuffer*		commandbuffers;			// Swapchain command buffers.  TODO: Move this into wsVulkanSwapChain.
 	
 	// Used for feeding information to shaders.
 	VkDescriptorPool		descriptorpool;
@@ -123,9 +123,18 @@ typedef struct wsVulkan
 	VkBuffer*		uniformbuffers;
 	VkDeviceMemory*	uniformbuffers_memory;
 	void**			uniformbuffers_mapped;
+	
+	// Necessary for calculating UBO view matrix.
+	vec3* cameraPosition;
+	vec3* cameraForward;
+	vec3* cameraUp;
+	mat4* cameraProjection;
 
-	VkSampler		texturesampler;	// Texture sampler.
-
+	VkSampler texturesampler;
+	VkSampleCountFlagBits MSAASampleCount;
+	
+	wsTexture colorTexture; // TODO: Move both this and depth texture into wsSwapChain.
+	
 	// Used for depth buffering in the fragment shader stage.
 	// wsTexture depthTexture;	// TODO: This.
 	VkImage			depthimage;
@@ -138,12 +147,6 @@ typedef struct wsVulkan
 	wsMesh testMesh;
 	
 	wsShader shader;
-
-	// Necessary for calculating UBO view matrix.
-	vec3* cameraPosition;
-	vec3* cameraForward;
-	vec3* cameraUp;
-	mat4* cameraProjection;
 	
 	uint8_t windowID;
 }
