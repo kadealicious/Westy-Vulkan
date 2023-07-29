@@ -588,7 +588,7 @@ VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
 	stbi_uc* pixel_data = stbi_load(path, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
 	VkDeviceSize img_size = tex_width * tex_height * 4;	// For STBI_rgb_alpha, there will be 4 bytes needed per pixel.
 	
-	texture->mipLevels = (uint32_t)floor(log2(mfMaxInt(tex_width, tex_height))) + 1;
+	texture->mipLevels = (uint32_t)floor(log2(mfMaxUint32(tex_width, tex_height))) + 1;
 	
 	if(!pixel_data)
 		{ printf("ERROR: Failed to load texture at path \"%s\"!\n", path); }
@@ -1729,8 +1729,8 @@ void wsVulkanChooseSwapExtent()
 		glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
 		
 		// Set extent width.
-		swapchain_info->extent.width = mfClampInt((uint32_t)width, capabilities->minImageExtent.width, capabilities->maxImageExtent.width);
-		swapchain_info->extent.height = mfClampInt((uint32_t)height, capabilities->minImageExtent.height, capabilities->maxImageExtent.height);
+		swapchain_info->extent.width = mfClampUint32((uint32_t)width, capabilities->minImageExtent.width, capabilities->maxImageExtent.width);
+		swapchain_info->extent.height = mfClampUint32((uint32_t)height, capabilities->minImageExtent.height, capabilities->maxImageExtent.height);
 	}
 }
 
