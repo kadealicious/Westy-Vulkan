@@ -14,6 +14,10 @@ typedef struct wsShader
     bool isloaded[NUM_MAX_SHADERS];             // Says whether or not shader is loaded into memory.
     char* shader_data[NUM_MAX_SHADERS];         // Holds bytecode shader data for all shaders.
     uint32_t shader_size[NUM_MAX_SHADERS];      // Stores size of each shader in bytes.
+	
+	VkDescriptorPool		descriptorPool;
+	VkDescriptorSet*		descriptorSets;
+	VkDescriptorSetLayout	descriptorSetLayout;
 
 } wsShader;
 

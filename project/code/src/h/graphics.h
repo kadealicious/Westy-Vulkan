@@ -36,15 +36,15 @@ typedef struct wsRenderObject
 }
 wsRenderObject;
 
-typedef struct wsVulkanUniformBufferObject
+typedef struct wsUniformBufferObject
 {
 	mat4 model;
 	mat4 view;
 	mat4 proj;
 }
-wsVulkanUBO;
+wsUBO;
 
-typedef struct wsVulkanQueueFamilies
+typedef struct wsQueueFamilies
 {
 	uint32_t* unique_queue_family_indices;
 	uint8_t num_unique_queue_families;
@@ -66,22 +66,28 @@ typedef struct wsVulkanQueueFamilies
 	uint32_t ndx_present_family;// Index of presentation queue family.
 	VkQueue present_queue;		// Presentation queue family.
 }
-wsVulkanQueueFamilies;
+wsQueueFamilies;
 
-typedef struct wsVulkanSwapChain
+typedef struct wsSwapChain
 {
 	VkSwapchainKHR sc;						// Actual Vulkan swap chain instance.
 	VkFramebuffer* framebuffers;			// Stores framebuffers for rendering images to the swap chain!
-	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
+	VkCommandBuffer* cmdBuffers;
+	
 	uint32_t current_frame;					// Stores current frame we are cycled to in the swapchain.
 	bool framebuffer_hasresized;			// Has our framebuffer been resized?
+	
+	VkSampleCountFlagBits MSAASamples;
+	wsTexture colorTexture;
+	wsTexture depthTexture;
 	
 	VkExtent2D extent;			// Extent (resolution) of swapchain images.
 	uint32_t num_images;		// Number of images allowed for swapchain buffering.  Default is 4.
 	VkImage* images;			// Pointer to array of swap chain images.
 	VkImageView* image_views;	// Specifies how we use and view each image within the swap chain.
 	VkFormat image_format;		// Specifies image format for swapchain to use.
-
+	
+	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
 	VkSurfaceFormatKHR surface_format;	// Selected surface format.
 	VkSurfaceFormatKHR* formats;		// List of supported surface formats.
 	uint32_t num_formats;				// Number of supported surface formats.
@@ -90,7 +96,7 @@ typedef struct wsVulkanSwapChain
 	VkPresentModeKHR* present_modes;// List of supported presentation modes.
 	uint32_t num_present_modes;		// Number of supported presentation modes.
 }
-wsVulkanSwapChain;
+wsSwapChain;
 
 typedef struct wsVulkan
 {
@@ -99,21 +105,15 @@ typedef struct wsVulkan
 	VkDevice				 logical_device;
 	VkDebugUtilsMessengerEXT debug_messenger;
 	
-	wsVulkanSwapChain	swapchain;
-	VkCommandBuffer*	commandbuffers;			// Swapchain command buffers.  TODO: Move this into wsVulkanSwapChain.
+	wsSwapChain			swapchain;
 	VkSurfaceKHR		surface;
 	VkPipeline			pipeline;
 	VkPipelineLayout	pipeline_layout;
 	VkRenderPass		renderpass;
 
-	wsVulkanQueueFamilies	queues;					// Contains all queue data.
-	VkCommandPool			commandpool_graphics;	// Pool for sending graphics/presentation commands to Vulkan for execution.
-	VkCommandPool			commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
-	
-	// Used for feeding information to shaders.
-	VkDescriptorPool		descriptorpool;
-	VkDescriptorSet*		descriptorsets;
-	VkDescriptorSetLayout	descriptorset_layout;
+	wsQueueFamilies	queues;					// Contains all queue data.
+	VkCommandPool	commandpool_graphics;	// Pool for sending graphics/presentation commands to Vulkan for execution.
+	VkCommandPool	commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
 	
 	VkFence*		inflight_fences;			// Used to check if image(s) can be processed by the CPU.
 	VkSemaphore*	img_available_semaphores;	// Used to check if GPU has any image(s) available for rendering.
@@ -129,17 +129,8 @@ typedef struct wsVulkan
 	vec3* cameraForward;
 	vec3* cameraUp;
 	mat4* cameraProjection;
-
+	
 	VkSampler texturesampler;
-	VkSampleCountFlagBits MSAASampleCount;
-	
-	wsTexture colorTexture; // TODO: Move both this and depth texture into wsSwapChain.
-	
-	// Used for depth buffering in the fragment shader stage.
-	// wsTexture depthTexture;	// TODO: This.
-	VkImage			depthimage;
-	VkDeviceMemory	depthimage_memory;
-	VkImageView		depthimage_view;
 	
 	wsRenderObject renderObjects[WS_MAX_RENDER_OBJECTS];
 	wsRenderObject testRenderObject;
