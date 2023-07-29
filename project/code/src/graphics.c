@@ -1517,9 +1517,9 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	// Multisampling!  Great for reducing aliasing artifacting along edges of polygons where more than one poly may occupy a single pixel.
 	VkPipelineMultisampleStateCreateInfo multisampling_info = {};
 	multisampling_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling_info.sampleShadingEnable	= VK_FALSE;
+	multisampling_info.sampleShadingEnable	= VK_TRUE;
 	multisampling_info.rasterizationSamples	= vk->swapchain.MSAASamples;
-	multisampling_info.minSampleShading		= 1.0f;
+	multisampling_info.minSampleShading		= 0.2f;	// Closer to one makes the sample rate shading smoother.
 	multisampling_info.pSampleMask = NULL;
 	multisampling_info.alphaToCoverageEnable = VK_FALSE;
 	multisampling_info.alphaToOneEnable = VK_FALSE;
@@ -1856,6 +1856,7 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	VkPhysicalDeviceFeatures device_features = {};
 	vkGetPhysicalDeviceFeatures(vk->physical_device, &device_features);
 	device_features.samplerAnisotropy = device_features.samplerAnisotropy;	// Request sampler anisotropy feature be enabled for texture sampling later on.
+	device_features.sampleRateShading = VK_TRUE;	// Smooths out textures within geometry to compliment MSAA features (impacts performance).
 	
 	// Specify creation info for logical_gpuVK.
 	VkDeviceCreateInfo create_info = {};
