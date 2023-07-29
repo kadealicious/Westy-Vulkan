@@ -7,12 +7,12 @@ HEADDIR = code/src/h
 OBJDIR = code/obj
 CLEANDIR = code\obj
 
-_OBJS = main.o window.o input.o graphics.o mesh.o texture.o shader.o camera.o game.o
+_OBJS = main.o window.o input.o graphics.o mesh.o texture.o shader.o camera.o game.o mafs.o
 OBJS = $(patsubst %, $(OBJDIR)/%,$(_OBJS))
 CLEANOBJS = $(patsubst %, $(CLEANDIR)\\%,$(_OBJS))
-_SRCS = main.c window.c input.c graphics.c mesh.c texture.c shader.c camera.c game.c
+_SRCS = main.c window.c input.c graphics.c mesh.c texture.c shader.c camera.c game.c mafs.c
 SRCS = $(patsubst %, $(SRCDIR)/%,$(_SRCS))
-_HEADS = stb_image.h window.h input.h graphics.h mesh.h texture.h shader.h camera.h game.h
+_HEADS = stb_image.h window.h input.h graphics.h mesh.h texture.h shader.h camera.h game.h mafs.h
 HEADS = $(patsubst %, $(HEADDIR)/%,$(_HEADS))
 
 all: app
@@ -34,6 +34,8 @@ code/obj/shader.o: code/src/shader.c
 code/obj/camera.o: code/src/camera.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/game.o: code/src/game.c
+	$(CC) $(CCFLAGS) -c $^ -o $@
+code/obj/mafs.o: code/src/mafs.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 
 shaders: 

@@ -108,7 +108,7 @@ typedef struct wsVulkan
 	wsVulkanQueueFamilies	queues;					// Contains all queue data.
 	VkCommandPool			commandpool_graphics;	// Pool for sending graphics/presentation commands to Vulkan for execution.
 	VkCommandPool			commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
-	VkCommandBuffer*		commandbuffers;			// Buffer(s) used for recording commands to for sending to command pool.
+	VkCommandBuffer*		commandbuffers;			// Swapchain command buffers.  TODO: Move this into wsVulkanSwapChain.
 	
 	// Used for feeding information to shaders.
 	VkDescriptorPool		descriptorpool;
@@ -160,8 +160,8 @@ void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
 
 void wsVulkanCreateTexture(const char* texPath, wsTexture* texture);
 void wsVulkanDestroyTexture(wsTexture* texture);
-VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path);
-VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags);
+VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path);
+VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mipLevels);
 
 void wsVulkanSetDebug(uint8_t debug_mode);
 float wsVulkanGetAspectRatio();

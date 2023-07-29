@@ -18,10 +18,11 @@ wsTexture* wsTextureInit(VkDevice* logicalDevice)
 
 void wsTextureCreate(const char* texPath, wsTexture* texture)
 {
-	if(wsVulkanCreateTextureImage(&texture->image, &texture->memory, texPath) != VK_SUCCESS)
-		{ texture = &texMan.fallbackTexture; return; }
-	if(wsVulkanCreateImageView(&texture->image, &texture->view, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT) != VK_SUCCESS)
-		{ texture = &texMan.fallbackTexture; return; }	
+	if(wsVulkanCreateTextureImage(texture, texPath) != VK_SUCCESS)
+		{texture = &texMan.fallbackTexture; return;}
+	
+	if(wsVulkanCreateImageView(&texture->image, &texture->view, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, texture->mipLevels) != VK_SUCCESS)
+		{texture = &texMan.fallbackTexture; return;}	
 }
 
 void wsTextureDestroy(wsTexture* texture)

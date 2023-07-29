@@ -8,6 +8,7 @@
 
 typedef struct wsTexture
 {
+	uint32_t mipLevels;
     VkImage			image;
     VkDeviceMemory	memory;
 	VkImageView		view;

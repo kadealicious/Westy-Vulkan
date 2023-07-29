@@ -13,12 +13,13 @@
 
 #include"h/graphics.h"
 #include"h/window.h"
+#include"h/mafs.h"
 
 
 enum WS_VK_ID_STATE
 	{ NONE = INT32_MAX };
 enum WS_VK_COMMAND_TYPE
-	{ COMMAND_GRAPHICS, COMMAND_TRANSFER, COMMAND_QUEUE_OWNERSHIP_TRANSFER };
+	{ COMMAND_GRAPHICS, COMMAND_TRANSFER, COMMAND_QUEUE_OWNERSHIP_TRANSFER, COMMAND_ANY };
 enum GPU_INCOMPATIBILITY_CODES
 {
 	NO_GEOMETRY_SHADER = -100, NO_GRAPHICS_FAMILY, NO_TRANSFER_FAMILY, NO_PRESENTATION_FAMILY, 
@@ -97,11 +98,12 @@ bool wsVulkanHasStencilComponent(VkFormat format);
 VkResult wsVulkanCreateDepthResources();	// Creates depth buffer image and associated resources.
 
 // Functions for creating and handling images and their memory.
-VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags);
+VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mipLevels);
+VkResult wsVulkanGenerateMipMaps(wsTexture* texture, VkFormat imageFormat, int32_t textureWidth, int32_t textureHeight);
 VkResult wsVulkanCreateTextureSampler();
-VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path);
+VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path);
 VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_candidates, VkImageTiling desired_tiling, VkFormatFeatureFlags desired_features);
-void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new);
+void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new, uint32_t mipLevels);
 void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 
 // Buffer stuffer.
@@ -122,7 +124,6 @@ void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height
 float wsVulkanGetAspectRatio();
 void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result);		// Always prints.
 void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result);	// Only prints on error.
-uint32_t clamp(uint32_t num, uint32_t min, uint32_t max) {const uint32_t t = num < min ? min : num;return t > max ? max : t;}	// Clamp function!  WHY DOESN'T C HAVE THIS BUILT IN
 
 
 // Call after wsWindowInit().
@@ -518,7 +519,11 @@ wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* tex
 			wsTextureCreate(texPath, &vk->renderObjects[i].texture);
 			
 			wsMeshCreate(meshPath, &vk->renderObjects[i].mesh);
-			wsVulkanCreateVertexBuffer(&vk->renderObjects[i].mesh);// Creates vertex buffers which hold our vertex input data.
+			
+			/* In order to create our initial descriptor set, we need a mesh.  However, we cannot 
+				generate its vertex and index buffers until AFTER the pipeline has been created.  
+				Therefore, we must do this part here, and not as a part of wsMeshCreate(). */
+			wsVulkanCreateVertexBuffer(&vk->renderObjects[i].mesh);
 			wsVulkanCreateIndexBuffer(&vk->renderObjects[i].mesh);
 			
 			return &vk->renderObjects[i];
@@ -538,7 +543,7 @@ void wsVulkanDestroyRenderObject(wsRenderObject* renderObject)
 	}
 }
 
-VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
+VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
 {
 	// Initialize VkImage inside of struct vk.
 	VkImageCreateInfo image_info = {};
@@ -547,7 +552,7 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, V
 	image_info.extent.width = width;
 	image_info.extent.height = height;
 	image_info.extent.depth = 1;
-	image_info.mipLevels = 1;
+	image_info.mipLevels = mipLevels;
 	image_info.arrayLayers = 1;
 	image_info.format = format;
 	image_info.tiling = tiling;
@@ -574,7 +579,7 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, VkFormat format, V
 	return result;
 }
 
-VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_memory, const char* path)
+VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
 {
 	// First, load the image using stb_image.h.
 	int tex_width;
@@ -582,6 +587,9 @@ VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_me
 	int tex_channels;
 	stbi_uc* pixel_data = stbi_load(path, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
 	VkDeviceSize img_size = tex_width * tex_height * 4;	// For STBI_rgb_alpha, there will be 4 bytes needed per pixel.
+	
+	texture->mipLevels = (uint32_t)floor(log2(mfMaxInt(tex_width, tex_height))) + 1;
+	
 	if(!pixel_data)
 		{ printf("ERROR: Failed to load texture at path \"%s\"!\n", path); }
 	else printf("INFO: Texture at path \"%s\" of dimension %ix%i w/ %i channels successfully loaded!\n", 
@@ -601,13 +609,19 @@ VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_me
 	stbi_image_free(pixel_data);
 	
 	// Create the image!
-	VkResult result = wsVulkanCreateImage(tex_width, tex_height, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tex_image, image_memory);
+	VkResult result = wsVulkanCreateImage(tex_width, tex_height, texture->mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
+											VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+											VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &texture->image, &texture->memory);
 	wsVulkanPrint("image memory binding", NONE, NONE, NONE, result);
 	
 	// Copy our staging buffer to a GPU/shader-suitable VkImage format.
-	wsVulkanTransitionImageLayout(*tex_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	wsVulkanCopyBufferToImage(stagingbuffer, *tex_image, (uint32_t)tex_width, (uint32_t)tex_height);
-	wsVulkanTransitionImageLayout(*tex_image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	wsVulkanTransitionImageLayout(texture->image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture->mipLevels);
+	wsVulkanCopyBufferToImage(stagingbuffer, texture->image, (uint32_t)tex_width, (uint32_t)tex_height);
+	if(wsVulkanGenerateMipMaps(texture, VK_FORMAT_R8G8B8A8_SRGB, tex_width, tex_height) != VK_SUCCESS)
+	{
+		texture->mipLevels = 0;	// Setting this here after already transitioning the image layout may cause issues; for now it's fine.
+		wsVulkanTransitionImageLayout(texture->image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture->mipLevels);
+	}
 	
 	// Clean up!
 	vkDestroyBuffer(vk->logical_device, stagingbuffer, NULL);
@@ -616,7 +630,7 @@ VkResult wsVulkanCreateTextureImage(VkImage* tex_image, VkDeviceMemory* image_me
 	return result;
 }
 
-VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags)
+VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mipLevels)
 {
 	VkImageViewCreateInfo view_info = {};
 	view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -631,7 +645,7 @@ VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkForm
 	// subresourceRange describes what the image's purpose is, as well as which part of the image we will be accessing.
 	view_info.subresourceRange.aspectMask = aspect_flags;
 	view_info.subresourceRange.baseMipLevel = 0;
-	view_info.subresourceRange.levelCount = 1;
+	view_info.subresourceRange.levelCount = mipLevels;
 	view_info.subresourceRange.baseArrayLayer = 0;
 	view_info.subresourceRange.layerCount = 1;
 	
@@ -640,7 +654,7 @@ VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkForm
 	return result;
 }
 
-void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new)
+void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new, uint32_t mipLevels)
 {
 	VkImageMemoryBarrier barrier_acquire = {};
 	VkImageMemoryBarrier barrier_release = {};	// Only used if queue family ownership transfer is necessary.
@@ -661,7 +675,7 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 	else barrier_acquire.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	
 	barrier_acquire.subresourceRange.baseMipLevel = 0;
-	barrier_acquire.subresourceRange.levelCount = 1;
+	barrier_acquire.subresourceRange.levelCount = mipLevels;
 	barrier_acquire.subresourceRange.baseArrayLayer = 0;
 	barrier_acquire.subresourceRange.layerCount = 1;
 	
@@ -699,7 +713,7 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 			barrier_release.image = image;
 			barrier_release.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			barrier_release.subresourceRange.baseMipLevel = 0;
-			barrier_release.subresourceRange.levelCount = 1;
+			barrier_release.subresourceRange.levelCount = mipLevels;
 			barrier_release.subresourceRange.baseArrayLayer = 0;
 			barrier_release.subresourceRange.layerCount = 1;
 		}
@@ -748,6 +762,97 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 	}
 }
 
+VkResult wsVulkanGenerateMipMaps(wsTexture* texture, VkFormat imageFormat, int32_t textureWidth, int32_t textureHeight)
+{
+	VkFormatProperties formatProperties;
+	vkGetPhysicalDeviceFormatProperties(vk->physical_device, imageFormat, &formatProperties);
+	
+	if(!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+	{
+		printf("ERROR: Vulkan texture image format %i does not support linear blitting!\n", imageFormat);
+		return VK_ERROR_FORMAT_NOT_SUPPORTED;
+	}
+	
+	VkCommandBuffer cmdBuffer;
+	wsVulkanBeginSingleTimeCommands(&cmdBuffer, COMMAND_GRAPHICS);
+	
+	VkImageMemoryBarrier barrier = {};
+	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.image = texture->image;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.baseArrayLayer = 0;
+	barrier.subresourceRange.layerCount = 1;
+	barrier.subresourceRange.levelCount = 1;
+	
+	int32_t mipWidth = textureWidth;
+	int32_t mipHeight = textureHeight;
+	
+	for(uint32_t i = 1; i < texture->mipLevels; i++)
+	{
+		barrier.subresourceRange.baseMipLevel = (i - 1);
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		
+		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 
+								0, 0, NULL, 0, NULL, 1, &barrier);
+		
+		VkImageBlit blit = {};
+		
+		blit.srcOffsets[0] = (VkOffset3D){0, 0, 0};
+		blit.srcOffsets[1] = (VkOffset3D){mipWidth, mipHeight, 1};
+		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.srcSubresource.mipLevel = (i - 1);
+		blit.srcSubresource.baseArrayLayer = 0;
+		blit.srcSubresource.layerCount = 1;
+		
+		blit.dstOffsets[0] = (VkOffset3D){0, 0, 0};
+		int32_t dstMipWidth = (mipWidth > 1 ? mipWidth / 2 : 1);
+		int32_t dstMipHeight = (mipHeight > 1 ? mipHeight / 2 : 1);
+		blit.dstOffsets[1] = (VkOffset3D){dstMipWidth, dstMipHeight, 1};
+		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.dstSubresource.mipLevel = i;
+		blit.dstSubresource.baseArrayLayer = 0;
+		blit.dstSubresource.layerCount = 1;
+		
+		vkCmdBlitImage(cmdBuffer, texture->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 
+						texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, 
+						VK_FILTER_LINEAR);
+		
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		
+		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+								0, 0, NULL, 0, NULL, 1, &barrier);
+		
+		// In case an image is not perfectly square, we prevent an erroneous mip level of 0.
+		if(mipWidth > 1)
+			mipWidth /= 2;
+		if(mipHeight > 1)
+			mipHeight /= 2;
+	}
+	
+	barrier.subresourceRange.baseMipLevel = (texture->mipLevels - 1);
+	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	
+	vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+							0, 0, NULL, 0, NULL, 1, &barrier);
+	
+	wsVulkanEndSingleTimeCommands(&cmdBuffer, COMMAND_GRAPHICS);
+	
+	printf("INFO: Vulkan Mip Maps have successfully been generated!\n");
+	
+	return VK_SUCCESS;
+}
+
 VkResult wsVulkanCreateTextureSampler()
 {
 	VkSamplerCreateInfo sampler_info = {};
@@ -783,7 +888,7 @@ VkResult wsVulkanCreateTextureSampler()
 	sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 	sampler_info.mipLodBias = 0.0f;
 	sampler_info.minLod = 0.0f;
-	sampler_info.maxLod = 0.0f;
+	sampler_info.maxLod = (float)(vk->testTexture.mipLevels);
 	
 	VkResult result = vkCreateSampler(vk->logical_device, &sampler_info, NULL, &vk->texturesampler);
 	wsVulkanPrint("texture sampler creation", NONE, NONE, NONE, result);
@@ -855,10 +960,10 @@ VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_cand
 VkResult wsVulkanCreateDepthResources()
 {
 	VkFormat depth_format = wsVulkanFindDepthFormat();
-	VkResult result = wsVulkanCreateImage(vk->swapchain.extent.width, vk->swapchain.extent.height, depth_format, VK_IMAGE_TILING_OPTIMAL, 
+	VkResult result = wsVulkanCreateImage(vk->swapchain.extent.width, vk->swapchain.extent.height, 1, depth_format, VK_IMAGE_TILING_OPTIMAL, 
 											VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk->depthimage, 
 											&vk->depthimage_memory);
-	result = wsVulkanCreateImageView(&vk->depthimage, &vk->depthimage_view, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
+	result = wsVulkanCreateImageView(&vk->depthimage, &vk->depthimage_view, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 	
 	return result;
 }
@@ -1486,7 +1591,7 @@ uint32_t wsVulkanCreateImageViews()
 	// Create image view for each swap chain image.
 	for(uint32_t i = 0; i < vk->swapchain.num_images; i++)
 	{
-		VkResult result = wsVulkanCreateImageView(&vk->swapchain.images[i], &vk->swapchain.image_views[i], vk->swapchain.image_format, VK_IMAGE_ASPECT_COLOR_BIT);
+		VkResult result = wsVulkanCreateImageView(&vk->swapchain.images[i], &vk->swapchain.image_views[i], vk->swapchain.image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 		if(result == VK_SUCCESS)
 			num_created++;
 	}
@@ -1624,8 +1729,8 @@ void wsVulkanChooseSwapExtent()
 		glfwGetFramebufferSize(wsWindowGetPtr(vk->windowID), &width, &height);
 		
 		// Set extent width.
-		swapchain_info->extent.width = clamp((uint32_t)width, capabilities->minImageExtent.width, capabilities->maxImageExtent.width);
-		swapchain_info->extent.height = clamp((uint32_t)height, capabilities->minImageExtent.height, capabilities->maxImageExtent.height);
+		swapchain_info->extent.width = mfClampInt((uint32_t)width, capabilities->minImageExtent.width, capabilities->maxImageExtent.width);
+		swapchain_info->extent.height = mfClampInt((uint32_t)height, capabilities->minImageExtent.height, capabilities->maxImageExtent.height);
 	}
 }
 

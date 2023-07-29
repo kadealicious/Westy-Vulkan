@@ -9,7 +9,8 @@
 			"cgltf.h": "c",
 			"stdbool.h": "c",
 			"vulkan.h": "c",
-			"glfw3.h": "c"
+			"glfw3.h": "c",
+			"stb_image.h": "c"
 		}
 	}
 }
