@@ -16,13 +16,13 @@ Created by:	**Kade Samson**
 ## Feature Set
 
 ### Pipeline
-- Dynamic state window scissor for faster framebuffer & swapchain recreation.
+- Dynamic state viewport for faster swap chain recreation.
 - Rasterization-based pipeline, raytraced pipeline in-progress.
 - Sample rate shading support to mitigate any aliasing caused by fragment shader artifacting.
 - MSAA support for up to 64 samples.
 
 ### Geometry
-- Embedded .gltf scene loading.
+- Embedded .gltf mesh loading.
 
 ### Texturing
 - Mipmapping & dynamic mip LOD control.
