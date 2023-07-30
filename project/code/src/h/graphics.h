@@ -30,9 +30,9 @@
 
 typedef struct wsRenderObject
 {
-	bool isActive;
-	wsMesh mesh;
-	wsTexture texture;
+	bool		isActive;
+	wsMesh		mesh;
+	wsTexture	texture;
 }
 wsRenderObject;
 
@@ -46,83 +46,83 @@ wsUBO;
 
 typedef struct wsQueueFamilies
 {
-	uint32_t* unique_queue_family_indices;
-	uint8_t num_unique_queue_families;
+	uint32_t*	uniqueQueueFamilyIndices;
+	uint8_t		uniqueQueueFamilyCount;
 	
-	// Used for drawing graphics!
-	bool has_graphics_family;		// Have we found a graphical queue family?
-	uint32_t ndx_graphics_family;	// Index of graphical queue family.
-	VkQueue graphics_queue;			// Graphics queue family.
+	bool		hasGraphicsFamily;	// This should always be true.
+	uint32_t	graphicsFamilyIndex;
+	VkQueue		graphicsQueue;
 	
-	/* Used for transferring data from the CPU to the GPU; very useful for vertex buffers!
-		This family is implicitly supported if the GPU can queue graphics/compute operations, 
-		however explicitly specifying it may allow for parallel command execution! */
-	bool has_transfer_family;		// Have we found a transfer-capable queue family?
-	uint32_t ndx_transfer_family;	// Index of transfer queue family.
-	VkQueue transfer_queue;			// Transfer queue family.
+	/* Used for transferring data from the CPU to the GPU.  This family is implicitly 
+		supported if the GPU can queue graphics/compute operations, however explicitly 
+		specifying it allows for parallel command execution between the unique queue families. */
+	bool		hasTransferFamily;	// This should always be true.
+	uint32_t	transferFamilyIndex;
+	VkQueue		transferQueue;
 	
-	// Used for presenting surfaces to the window.
-	bool has_present_family;	// Have we found a presentation queue family?
-	uint32_t ndx_present_family;// Index of presentation queue family.
-	VkQueue present_queue;		// Presentation queue family.
+	bool		hasPresentFamily;	// This should always be true.
+	uint32_t	presentFamilyIndex;
+	VkQueue		presentQueue;
 }
 wsQueueFamilies;
 
 typedef struct wsSwapChain
 {
-	VkSwapchainKHR sc;						// Actual Vulkan swap chain instance.
-	VkFramebuffer* framebuffers;			// Stores framebuffers for rendering images to the swap chain!
-	VkCommandBuffer* cmdBuffers;
-	
-	uint32_t current_frame;					// Stores current frame we are cycled to in the swapchain.
-	bool framebuffer_hasresized;			// Has our framebuffer been resized?
+	VkSwapchainKHR		sc;				// Actual Vulkan swap chain instance.
+	VkFramebuffer*		framebuffers;	// Stores framebuffers for rendering images to the swap chain!
+	VkCommandBuffer*	cmdBuffers;
+	uint32_t			currentFrame;		// Stores current frame we are cycled to in the swapchain.
+	bool				framebufferHasResized;	// Has our framebuffer been resized?
 	
 	VkSampleCountFlagBits MSAASamples;
 	wsTexture colorTexture;
 	wsTexture depthTexture;
 	
-	VkExtent2D extent;			// Extent (resolution) of swapchain images.
-	uint32_t num_images;		// Number of images allowed for swapchain buffering.  Default is 4.
-	VkImage* images;			// Pointer to array of swap chain images.
-	VkImageView* image_views;	// Specifies how we use and view each image within the swap chain.
-	VkFormat image_format;		// Specifies image format for swapchain to use.
+	VkExtent2D		extent;			// Extent (resolution) of swapchain images.
+	uint32_t		imageCount;		// Number of images allowed for swapchain buffering.  Default is 4.
+	VkImage*		images;			// Pointer to array of swap chain images.
+	VkImageView*	imageViews;		// Specifies how we use and view each image within the swap chain.
+	VkFormat		imageFormat;	// Specifies image format for swapchain to use.
 	
-	VkSurfaceCapabilitiesKHR capabilities;	// Specifies capabilities of swapchain.
-	VkSurfaceFormatKHR surface_format;	// Selected surface format.
-	VkSurfaceFormatKHR* formats;		// List of supported surface formats.
-	uint32_t num_formats;				// Number of supported surface formats.
+	VkSurfaceFormatKHR	surfaceFormat;		// Selected surface format.
+	VkSurfaceFormatKHR* supportedFormats;
+	uint32_t			supportedFormatCount;
 
-	VkPresentModeKHR present_mode;	// Selected presentation mode.
-	VkPresentModeKHR* present_modes;// List of supported presentation modes.
-	uint32_t num_present_modes;		// Number of supported presentation modes.
+	VkPresentModeKHR	presentMode;	// Selected presentation mode.
+	VkPresentModeKHR*	supportedPresentModes;
+	uint32_t			supportedPresentModeCount;
+	
+	VkSurfaceCapabilitiesKHR capabilities;
 }
 wsSwapChain;
 
 typedef struct wsVulkan
 {
 	VkInstance				 instance;
-	VkPhysicalDevice		 physical_device;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
-	VkDevice				 logical_device;
-	VkDebugUtilsMessengerEXT debug_messenger;
+	VkPhysicalDevice		 physicalDevice;	// Primary physical device.  Implicitly destroyed when Vulkan instance is destroyed.
+	VkDevice				 logicalDevice;
+	VkDebugUtilsMessengerEXT debugMessenger;
 	
 	wsSwapChain			swapchain;
 	VkSurfaceKHR		surface;
+	uint8_t				windowID;
 	VkPipeline			pipeline;
-	VkPipelineLayout	pipeline_layout;
-	VkRenderPass		renderpass;
+	VkPipelineLayout	pipelineLayout;
+	VkRenderPass		renderPass;
 
 	wsQueueFamilies	queues;					// Contains all queue data.
-	VkCommandPool	commandpool_graphics;	// Pool for sending graphics/presentation commands to Vulkan for execution.
-	VkCommandPool	commandpool_transfer;	// Pool for sending transfer commands to Vulkan for execution.
+	VkCommandPool	cmdPoolGraphics;	// Pool for sending graphics/presentation commands to Vulkan for execution.
+	VkCommandPool	cmdPoolTransfer;	// Pool for sending transfer commands to Vulkan for execution.
 	
-	VkFence*		inflight_fences;			// Used to check if image(s) can be processed by the CPU.
-	VkSemaphore*	img_available_semaphores;	// Used to check if GPU has any image(s) available for rendering.
-	VkSemaphore*	render_finish_semaphores;	// Used to check if GPU has finished rendering available image(s).
+	VkFence*		inFlightFences;			// Used to check if image(s) can be processed by the CPU.
+	VkSemaphore*	imageAvailableSemaphores;	// Used to check if GPU has any image(s) available for rendering.
+	VkSemaphore*	renderFinishSemaphores;	// Used to check if GPU has finished rendering available image(s).
 	
-	// Buffer containing all UBOs with transformation matrices for projection.
-	VkBuffer*		uniformbuffers;
-	VkDeviceMemory*	uniformbuffers_memory;
-	void**			uniformbuffers_mapped;
+	VkBuffer*		uniformBuffers;
+	VkDeviceMemory*	uniformBuffersMemory;
+	void**			uniformBuffersMapped;
+	
+	wsShader shader;
 	
 	// Necessary for calculating UBO view matrix.
 	vec3* cameraPosition;
@@ -132,14 +132,12 @@ typedef struct wsVulkan
 	
 	VkSampler texturesampler;
 	
-	wsRenderObject renderObjects[WS_MAX_RENDER_OBJECTS];
-	wsRenderObject testRenderObject;
-	wsTexture testTexture;
-	wsMesh testMesh;
+	wsRenderObject	renderObjects[WS_MAX_RENDER_OBJECTS];
+	wsRenderObject	testRenderObject;
+	wsTexture		testTexture;
+	wsMesh			testMesh;
 	
-	wsShader shader;
-	
-	uint8_t windowID;
+	bool supportsRaytracing;
 }
 wsVulkan;
 
