@@ -65,6 +65,7 @@ void wsVulkanDestroySwapChain();
 void wsVulkanChooseSwapSurfaceFormat(wsSwapChain* swapchain_info);
 void wsVulkanChooseSwapExtent();
 void wsVulkanChooseSwapPresentMode(wsSwapChain* swapchain_info);
+void wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult);
 
 uint32_t wsVulkanCreateImageViews();		// Creates image views viewing swap chain images; returns number of image views created successfully.
 VkResult wsVulkanCreateFrameBuffers();		// Creates framebuffers that reference image views representing image attachments (color, depth, etc.).
@@ -83,12 +84,13 @@ VkResult wsVulkanCreateCommandPool();		// Create command pool for queueing comma
 VkResult wsVulkanCreateCommandBuffers();	// Creates command buffer for holding commands.
 VkResult wsVulkanBeginSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype);
 VkResult wsVulkanEndSingleTimeCommands(VkCommandBuffer* commandbuffer, int32_t commandtype);
-VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, uint32_t img_ndx);
+VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* buffer, void* pushConstantBlock, uint32_t img_ndx);
 
 // Used to associate models and textures.
 wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath);
 void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
 
+// Color & depth buffering to allow for MSAA and properly rendered triangles.
 VkResult wsVulkanCreateColorResources();
 VkResult wsVulkanCreateDepthResources();
 VkFormat wsVulkanFindDepthFormat();
@@ -111,7 +113,7 @@ VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh);
 VkResult wsVulkanCreateUniformBuffers();
 void wsVulkanUpdateUniformBuffer(uint32_t currentFrame, double delta_time);
 
-// Raytraing.
+// Who needs shadow maps?
 bool wsVulkanCheckDeviceRayTracingExtensionSupport(VkPhysicalDevice* physicalDevice);
 
 // Vulkan proxy functions.
@@ -210,58 +212,50 @@ VkResult wsVulkanDrawFrame(double delta_time)
 	// Acquire next swapchain image.  If out of date or suboptimal, recreate it!
 	uint32_t img_ndx;
 	VkResult result = vkAcquireNextImageKHR(vk->logicalDevice, vk->swapchain.sc, UINT64_MAX, vk->imageAvailableSemaphores[vk->swapchain.currentFrame], VK_NULL_HANDLE, &img_ndx);
-	switch(result)
-	{
-		case VK_SUCCESS: 
-		case VK_SUBOPTIMAL_KHR: 
-			break;
-			
-		case VK_ERROR_OUT_OF_DATE_KHR: 
-			printf("WARNING: Vulkan swap chain configuration found to be out of date while acquiring next image; recreating!\n");
-			wsVulkanRecreateSwapChain();
-			return result;
-		
-		default: 
-			printf("ERROR: Vulkan swap chain failed to acquire next image with result code %i!", result);
-			return result;
-	}
+	
+	wsVulkanVerifySwapChainConfiguration(result);
+	if(result != VK_SUCCESS)
+		return result;
 	
 	// This may be the incorrect argument; try "image_ndx"?
 	wsVulkanUpdateUniformBuffer(vk->swapchain.currentFrame, delta_time);
 	
-	// Reset fences and command buffer, then begin recording commands.
+	// Reset fences and command buffer, then record all drawing commands.
+	VkCommandBuffer* currentCmdBuffer = &vk->swapchain.cmdBuffers[vk->swapchain.currentFrame];
 	vkResetFences(vk->logicalDevice, 1, &vk->inFlightFences[vk->swapchain.currentFrame]);
-	vkResetCommandBuffer(vk->swapchain.cmdBuffers[vk->swapchain.currentFrame], 0);
-	wsVulkanRecordCommandBuffer(&vk->swapchain.cmdBuffers[vk->swapchain.currentFrame], img_ndx);
+	vkResetCommandBuffer(*currentCmdBuffer, 0);
+	
+	vk->globalPushConstants.time += (float)delta_time;
+	wsVulkanRecordCommandBuffer(currentCmdBuffer, (void*)&vk->globalPushConstants, img_ndx);
 	
 	// Create configuration for queue submission & synchronization.
-	VkSubmitInfo submit_info = {};
-	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.commandBufferCount = 1;
-	submit_info.pCommandBuffers = &vk->swapchain.cmdBuffers[vk->swapchain.currentFrame];
+	VkSubmitInfo submit_info			= {};
+	submit_info.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount		= 1;
+	submit_info.pCommandBuffers			= currentCmdBuffer;
 	VkSemaphore wait_semaphores[]		= {vk->imageAvailableSemaphores[vk->swapchain.currentFrame]};
 	VkPipelineStageFlags wait_stages[]	= {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-	submit_info.waitSemaphoreCount = 1;
-	submit_info.pWaitSemaphores = wait_semaphores;
-	submit_info.pWaitDstStageMask = wait_stages;
-	VkSemaphore signal_semaphores[] = {vk->renderFinishSemaphores[vk->swapchain.currentFrame]};
-	submit_info.signalSemaphoreCount = 1;
-	submit_info.pSignalSemaphores = signal_semaphores;
+	submit_info.waitSemaphoreCount		= 1;
+	submit_info.pWaitSemaphores			= wait_semaphores;
+	submit_info.pWaitDstStageMask		= wait_stages;
+	VkSemaphore signal_semaphores[]		= {vk->renderFinishSemaphores[vk->swapchain.currentFrame]};
+	submit_info.signalSemaphoreCount	= 1;
+	submit_info.pSignalSemaphores		= signal_semaphores;
 	
 	// Submit queue to be executed by Vulkan.
 	result = vkQueueSubmit(vk->queues.graphicsQueue, 1, &submit_info, vk->inFlightFences[vk->swapchain.currentFrame]);
 	wsVulkanPrintQuiet("draw command buffer submission", NONE, NONE, NONE, result);
 	
 	// Configure presentation specification.
-	VkPresentInfoKHR present_info = {};
-	present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	present_info.waitSemaphoreCount = 1;
-	present_info.pWaitSemaphores = signal_semaphores;
-	VkSwapchainKHR swapchains[] = {vk->swapchain.sc};
-	present_info.swapchainCount = 1;
-	present_info.pSwapchains = swapchains;
-	present_info.pImageIndices = &img_ndx;
-	present_info.pResults = NULL;
+	VkPresentInfoKHR present_info	= {};
+	present_info.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	present_info.waitSemaphoreCount	= 1;
+	present_info.pWaitSemaphores	= signal_semaphores;
+	VkSwapchainKHR swapchains[]		= {vk->swapchain.sc};
+	present_info.swapchainCount		= 1;
+	present_info.pSwapchains		= swapchains;
+	present_info.pImageIndices		= &img_ndx;
+	present_info.pResults			= NULL;
 	
 	// DRAW!!!  TO!!!!!!  SCREEN!!!!!!!!!  AAAAAAAAAHHHHHHHHH!!!!!!!!!!!!!!!!!!
 	result = vkQueuePresentKHR(vk->queues.presentQueue, &present_info);
@@ -276,31 +270,37 @@ VkResult wsVulkanDrawFrame(double delta_time)
 
 	// Is it necessary to check this again?  Find out!
 	// Update: It is.
-	switch(result) {
-		
-		case VK_SUCCESS: 
-			break;
-			
-		case VK_ERROR_OUT_OF_DATE_KHR: 
-			printf("WARNING: Vulkan swap chain configuration found to be out of date while presenting image; recreating!\n");
-			wsVulkanRecreateSwapChain();
-			return result;
-		
-		case VK_SUBOPTIMAL_KHR: 
-			printf("WARNING: Vulkan swap chain configuration found to be suboptimal while presenting image; recreating!\n");
-			wsVulkanRecreateSwapChain();
-			return result;
-		
-		default: 
-			printf("ERROR: Vulkan swap chain failed to present image with result code %i!", result);
-			return result;
-	}
+	wsVulkanVerifySwapChainConfiguration(result);
 	
 	// Loop around to the next frame in the swapchain.
 	vk->swapchain.currentFrame = (vk->swapchain.currentFrame + 1) % WS_MAX_FRAMES_IN_FLIGHT;
 	
 	return VK_SUCCESS;
 }
+
+void wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult)
+{
+	switch(lastImageOperationResult)
+	{
+		case VK_SUCCESS: 
+			break;
+			
+		case VK_ERROR_OUT_OF_DATE_KHR: 
+			printf("WARNING: Vulkan swap chain configuration found to be out of date while presenting image; recreating!\n");
+			wsVulkanRecreateSwapChain();
+			return;	// result;
+		
+		case VK_SUBOPTIMAL_KHR: 
+			printf("WARNING: Vulkan swap chain configuration found to be suboptimal while presenting image; recreating!\n");
+			wsVulkanRecreateSwapChain();
+			return;	// result;
+		
+		default: 
+			printf("ERROR: Vulkan swap chain failed to present image with result code %i!", lastImageOperationResult);
+			return;	// result;
+	}
+}
+
 void wsVulkanTerminate()
 {
 	// Wait for all asynchronous elements to finish execution and return to an idle state before continuing on.sss
@@ -389,7 +389,7 @@ VkResult wsVulkanCreateSyncObjects()
 	return VK_SUCCESS;
 }
 
-VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t img_ndx)
+VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, void* pushConstantBlock, uint32_t img_ndx)
 {
 	// Begin recording to the command buffer!
 	VkCommandBufferBeginInfo begin_info = {};
@@ -434,12 +434,14 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, uint32_t im
 	vkCmdSetScissor(*commandbuffer, 0, 1, &scissor);
 	
 	// Bind mesh information & draw!
-	VkBuffer vertexbuffers[1] = {vk->testRenderObject.mesh.vertexBuffer.buffer};
-	VkDeviceSize offsets[1] = {0};
+	VkBuffer vertexbuffers[1]		= {vk->testRenderObject.mesh.vertexBuffer.buffer};
+	VkDeviceSize offsets[1]			= {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
 	vkCmdBindIndexBuffer(*commandbuffer, vk->testRenderObject.mesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 
-		0, 1, &vk->shader.descriptorSets[vk->swapchain.currentFrame], 0, NULL);
+								0, 1, &vk->shader.descriptorSets[vk->swapchain.currentFrame], 0, NULL);
+	vkCmdPushConstants(*commandbuffer, vk->pipelineLayout, vk->globalPushConstantRange.stageFlags,
+						vk->globalPushConstantRange.offset, vk->globalPushConstantRange.size, pushConstantBlock);
 	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testRenderObject.mesh.num_indices, 1, 0, 0, 0);
 	
 	vkCmdEndRenderPass(*commandbuffer);
@@ -1430,6 +1432,11 @@ VkResult wsVulkanCreateDescriptorSetLayout()
 
 VkResult wsVulkanCreateGraphicsPipeline()
 {
+	vk->globalPushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	vk->globalPushConstantRange.offset = 0;
+	vk->globalPushConstantRange.size = sizeof(wsGPCB);	// TODO: Make this modular so you can have different push constant blocks.
+	
+	
 	// ---------------------
 	// CREATE SHADER MODULES
 	// ---------------------
@@ -1449,7 +1456,6 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	VkPipelineShaderStageCreateInfo vert_shaderstage_info = {};
 	vert_shaderstage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	vert_shaderstage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	
 	vert_shaderstage_info.pSpecializationInfo = NULL;
 	vert_shaderstage_info.module = vert_module;
 	vert_shaderstage_info.pName = "main";
@@ -1458,16 +1464,14 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	VkPipelineShaderStageCreateInfo frag_shaderstage_info = {};
 	frag_shaderstage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	frag_shaderstage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	frag_shaderstage_info.pNext = NULL;
-	frag_shaderstage_info.flags = 0;
 	frag_shaderstage_info.pSpecializationInfo = NULL;
 	frag_shaderstage_info.module = frag_module;
 	frag_shaderstage_info.pName = "main";
 	
 	// NOTE: Modules destroyed at end of function.
 	VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shaderstage_info, frag_shaderstage_info};
-
-
+	
+	
 	// ---------------------
 	// INITIALIZE FIXED-FUNCTION VALUES
 	// ---------------------
@@ -1572,8 +1576,8 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	pipelinelayout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelinelayout_info.setLayoutCount = 1;
 	pipelinelayout_info.pSetLayouts	= &vk->shader.descriptorSetLayout;
-	pipelinelayout_info.pushConstantRangeCount = 0;
-	pipelinelayout_info.pPushConstantRanges	= NULL;
+	pipelinelayout_info.pushConstantRangeCount = 1;
+	pipelinelayout_info.pPushConstantRanges	= &vk->globalPushConstantRange;
 	VkResult result = vkCreatePipelineLayout(vk->logicalDevice, &pipelinelayout_info, NULL, &vk->pipelineLayout);
 	wsVulkanPrint("pipeline layout creation", NONE, NONE, NONE, result);
 	
@@ -2040,7 +2044,7 @@ bool wsVulkanPickPhysicalDevice()
 	
 	for(int32_t i = 0; i < num_GPUs; i++)
 	{
-		printf("GPU %i: \t", i);
+		printf("INFO: Rating GPU %i...\n", i);
 
 		// Make sure we are checking current GPU's suitability;
 		vk->physicalDevice = GPUs[i];
@@ -2063,7 +2067,7 @@ bool wsVulkanPickPhysicalDevice()
 		
 		VkPhysicalDeviceProperties deviceProperties;
 		vkGetPhysicalDeviceProperties(vk->physicalDevice, &deviceProperties);
-		printf("INFO: GPU %i: I CHOOSE YOU!!!  Details: \n", ndx_GPU);
+		printf("INFO: GPU %i - I CHOOSE YOU!!!\n", ndx_GPU);
 		printf("\tDevice name: %s\n", deviceProperties.deviceName);
 		printf("\tDevice type: %i\n", deviceProperties.deviceType);
 		printf("\tDriver version: %i\n", deviceProperties.driverVersion);
@@ -2092,42 +2096,52 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physicalDevice)
 {
 	int32_t score = 0;
 	
-	VkPhysicalDeviceProperties device_properties;
-	vkGetPhysicalDeviceProperties(*physicalDevice, &device_properties);
+	VkPhysicalDeviceProperties deviceProperties;
+	VkPhysicalDeviceFeatures deviceFeatures;
+	VkPhysicalDeviceMemoryProperties memoryProperties;
+	vkGetPhysicalDeviceProperties(*physicalDevice, &deviceProperties);
+	vkGetPhysicalDeviceFeatures(*physicalDevice, &deviceFeatures);
+	vkGetPhysicalDeviceMemoryProperties(*physicalDevice, &memoryProperties);
 	
-	VkPhysicalDeviceFeatures device_features;
-	vkGetPhysicalDeviceFeatures(*physicalDevice, &device_features);
-	
-	if(!device_features.geometryShader)
-		return NO_GEOMETRY_SHADER;
-	if(!device_features.samplerAnisotropy)
-		score -= 500;
-	
-	// Program cannot function without certain queue families.
 	wsQueueFamilies indices;
-	uint32_t num_queue_families = wsVulkanFindQueueFamilies(&indices, physicalDevice, &vk->surface);
-	printf("Your device supports %i queue families!\n", num_queue_families);
+	uint32_t queueFamilyCount = wsVulkanFindQueueFamilies(&indices, physicalDevice, &vk->surface);
+	printf("\t%i queue families, max push constant size of %i\n", queueFamilyCount, deviceProperties.limits.maxPushConstantsSize);
 	
-	if(!indices.hasGraphicsFamily)
-		return NO_GRAPHICS_FAMILY;
-	if(!indices.hasTransferFamily)
-		return NO_TRANSFER_FAMILY;
-	if(!indices.hasPresentFamily)
-		return NO_PRESENTATION_FAMILY;
+	printf("\tMemory types: \n");
+	for(uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
+	{
+		printf("\t\tType %i -> Heap %i w/ property flags: ", i, memoryProperties.memoryTypes[i].heapIndex);
+		printb(memoryProperties.memoryTypes[i].propertyFlags);
+		printf("\n");
+	}
+	
+	printf("\tMemory heaps: \n");
+	for(uint32_t i = 0; i < memoryProperties.memoryHeapCount; i++)
+	{
+		printf("\t\tHeap %i: %0.2fGB w/ property flags: ", i, (memoryProperties.memoryHeaps[i].size / 1073741824.0f));
+		printb(memoryProperties.memoryHeaps[i].flags);
+		printf("\n");
+	}
+	
+	if(!deviceFeatures.geometryShader)	return NO_GEOMETRY_SHADER;
+	if(!indices.hasGraphicsFamily)		return NO_GRAPHICS_FAMILY;
+	if(!indices.hasTransferFamily)		return NO_TRANSFER_FAMILY;
+	if(!indices.hasPresentFamily)		return NO_PRESENTATION_FAMILY;
 	
 	if(!wsVulkanCheckDeviceExtensionSupport(physicalDevice))
 		return NO_DEVICE_EXTENSION_SUPPORT;
-	score += wsVulkanCheckDeviceRayTracingExtensionSupport(physicalDevice) * 2000;
-	
 	wsVulkanQuerySwapChainSupport();
 	if(vk->swapchain.supportedFormatCount <= 0 || vk->swapchain.supportedPresentModeCount <= 0)
 		return NO_SWAPCHAIN_SUPPORT;
 	
-	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1500 : 0;
-	score += indices.graphicsFamilyIndex == indices.presentFamilyIndex ? 1000 : 0;	// If these are the same queue family, this could increase performance (unlikely to execute in parallel).
+	score += deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 2000 : 0;
+	score += wsVulkanCheckDeviceRayTracingExtensionSupport(physicalDevice) * 1500;
 	score += indices.graphicsFamilyIndex != indices.transferFamilyIndex ? 2000 : 0;	// If these are separate queue families, this WILL increase performance (likely to execute in parallel).
-	score += device_properties.limits.maxImageDimension2D;
-	score += device_properties.limits.maxPushConstantsSize;
+	score += indices.graphicsFamilyIndex == indices.presentFamilyIndex ? 1000 : 0;	// If these are the same queue family, this could increase performance (unlikely to execute in parallel).
+	score -= deviceFeatures.samplerAnisotropy ? 0 : 500;
+	score += deviceFeatures.sampleRateShading ? 0 : 500;
+	score += deviceProperties.limits.maxImageDimension2D;
+	score += deviceProperties.limits.maxPushConstantsSize;
 	
 	return score;
 }
@@ -2154,7 +2168,7 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice)
 	
 	printf("\t%i device-specific extensions required: ", num_required_extensions);
 	for(int32_t i = 0; i < num_required_extensions; i++)
-		{ printf("\t%s", required_extensions[i]); }
+		{ printf("\t\t%s", required_extensions[i]); }
 	printf("\n");
 	
 	for(uint32_t i = 0; i < num_required_extensions; i++)
@@ -2169,13 +2183,13 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice)
 
 		if(!has_found_extension)
 		{
-			printf("\tERROR: REQUIRED device extension \"%s\" is not supported by your GPU!\n", required_extensions[i]);
+			printf("\t\tERROR: REQUIRED device extension \"%s\" is not supported by your GPU!\n", required_extensions[i]);
 			requiredExtensionsSupported = false;
 		}
 	}
 	
 	if(requiredExtensionsSupported)
-		{printf("\tAll required device-specific extensions are supported by your GPU!\n");}
+		{printf("\t\tAll required device-specific extensions are supported by your GPU!\n");}
 	
 	free(availableExtensions);	// BUG: Maybe a memory issue here?
 
@@ -2199,7 +2213,7 @@ bool wsVulkanCheckDeviceRayTracingExtensionSupport(VkPhysicalDevice* physicalDev
 	
 	printf("\t%i device-specific ray tracing extensions preferred: ", rayTracingExtensionCount);
 	for(int32_t i = 0; i < rayTracingExtensionCount; i++)
-		{ printf("\t%s", rayTracingExtensions[i]); }
+		{ printf("\t\t%s", rayTracingExtensions[i]); }
 	printf("\n");
 	
 	for(uint32_t i = 0; i < rayTracingExtensionCount; i++)
@@ -2214,14 +2228,14 @@ bool wsVulkanCheckDeviceRayTracingExtensionSupport(VkPhysicalDevice* physicalDev
 
 		if(!hasFoundExtension)
 		{
-			printf("\tWARNING: Optional device ray tracing extension \"%s\" is not supported by your GPU!\n", rayTracingExtensions[i]);
+			printf("\t\tWARNING: Optional device ray tracing extension \"%s\" is not supported by your GPU!\n", rayTracingExtensions[i]);
 			vk->supportsRayTracing = false;
 			rayTracingExtensionsSupported = false;
 		}
 	}
 	
 	if(rayTracingExtensionsSupported)
-		{printf("\tAll device-specific ray tracing extensions are supported by your GPU!\n");}
+		{printf("\t\tAll device-specific ray tracing extensions are supported by your GPU!\n");}
 	
 	free(availableExtensions);	// Bug: Maybe a memory issue?
 	

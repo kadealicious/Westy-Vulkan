@@ -10,7 +10,10 @@
 			"stdbool.h": "c",
 			"vulkan.h": "c",
 			"glfw3.h": "c",
-			"stb_image.h": "c"
+			"stb_image.h": "c",
+			"mafs.h": "c",
+			"stdio.h": "c",
+			"functional": "c"
 		}
 	}
 }

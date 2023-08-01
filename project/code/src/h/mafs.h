@@ -4,6 +4,8 @@
 #include<stdint.h>
 
 
+void printb(unsigned char value);	// Prints in binary!
+
 int mfClampInt(int num, int min, int max);
 int64_t mfClampInt64(int64_t num, int64_t min, int64_t max);
 int32_t mfClampInt32(int32_t num, int32_t min, int32_t max);

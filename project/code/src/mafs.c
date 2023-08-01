@@ -1,3 +1,4 @@
+#include<stdio.h>
 #include"h/mafs.h"
 
 
@@ -13,6 +14,12 @@
 #define MIN_LOGIC (a <= b ? a : b)
 #define MAX_LOGIC (a >= b ? a : b)
 
+
+void printb(unsigned char value)
+{
+    for (int i = sizeof(char) * 7; i >= 0; i--)
+    	{printf("%d", (value & (1 << i)) >> i );}
+}
 
 
 int mfClampInt(int num, int min, int max)											{num = CLAMP_MIN_LOGIC; num = CLAMP_MAX_LOGIC; return num;}

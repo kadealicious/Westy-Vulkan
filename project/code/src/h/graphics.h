@@ -44,6 +44,12 @@ typedef struct wsUniformBufferObject
 }
 wsUBO;
 
+typedef struct wsGlobalPushConstantBlock
+{
+	float time;
+}
+wsGPCB;
+
 typedef struct wsQueueFamilies
 {
 	uint32_t*	uniqueQueueFamilyIndices;
@@ -123,6 +129,8 @@ typedef struct wsVulkan
 	void**			uniformBuffersMapped;
 	
 	wsShader shader;
+	VkPushConstantRange globalPushConstantRange;
+	wsGPCB globalPushConstants;
 	
 	// Necessary for calculating UBO view matrix.
 	vec3* cameraPosition;
