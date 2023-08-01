@@ -151,8 +151,8 @@ wsVulkan;
 
 
 // These should only be called from main.c.  If they are called elsewhere, you fucked up.
-void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug);
-VkResult wsVulkanDrawFrame(double delta_time);
+void wsVulkanInit(wsVulkan* vulkanData, uint8_t windowID, bool isDebug);
+VkResult wsVulkanDrawFrame(double deltaTime);
 void wsVulkanTerminate();
 
 wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* texPath);
@@ -161,9 +161,9 @@ void wsVulkanDestroyRenderObject(wsRenderObject* renderObject);
 void wsVulkanCreateTexture(const char* texPath, wsTexture* texture);
 void wsVulkanDestroyTexture(wsTexture* texture);
 VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path);
-VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mipLevels);
+VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* imageView, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 
-void wsVulkanSetDebug(uint8_t debug_mode);
+void wsVulkanSetDebug(uint8_t debugMode);
 float wsVulkanGetAspectRatio();
 
 
