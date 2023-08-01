@@ -52,6 +52,7 @@ bool wsVulkanHasFoundAllQueueFamilies(wsQueueFamilies* indices);
 // Choose a physical device and set up a logical device for interfacing.
 bool wsVulkanPickPhysicalDevice();
 int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physicalDevice);
+uint32_t wsVulkanEnumerateDeviceExtentions(VkPhysicalDevice* physicalDevice, VkExtensionProperties** availableExtensions);
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice);
 VkSampleCountFlagBits wsVulkanGetMaxMSAASampleCount();
 void wsVulkanQuerySwapChainSupport();
@@ -109,6 +110,9 @@ VkResult wsVulkanCreateVertexBuffer(wsMesh* mesh);
 VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh);
 VkResult wsVulkanCreateUniformBuffers();
 void wsVulkanUpdateUniformBuffer(uint32_t currentFrame, double delta_time);
+
+// Raytraing.
+bool wsVulkanCheckDeviceRayTracingExtensionSupport(VkPhysicalDevice* physicalDevice);
 
 // Vulkan proxy functions.
 VkResult wsVulkanCreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* create_info, const VkAllocationCallbacks* allocator, VkDebugUtilsMessengerEXT* debugMessenger);
@@ -2088,18 +2092,14 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physicalDevice)
 {
 	int32_t score = 0;
 	
-	// Queue for device properties.
 	VkPhysicalDeviceProperties device_properties;
 	vkGetPhysicalDeviceProperties(*physicalDevice, &device_properties);
 	
-	// Queue for device features.
 	VkPhysicalDeviceFeatures device_features;
 	vkGetPhysicalDeviceFeatures(*physicalDevice, &device_features);
-
-	// Program cannot function without geometry shaders!
+	
 	if(!device_features.geometryShader)
 		return NO_GEOMETRY_SHADER;
-	// This is unfortunate if we cannot support anisotropy (as well as highly unlikely), but not the end of the world.
 	if(!device_features.samplerAnisotropy)
 		score -= 500;
 	
@@ -2115,35 +2115,39 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physicalDevice)
 	if(!indices.hasPresentFamily)
 		return NO_PRESENTATION_FAMILY;
 	
-	// Program cannot function without certain device-specific extensions.
 	if(!wsVulkanCheckDeviceExtensionSupport(physicalDevice))
 		return NO_DEVICE_EXTENSION_SUPPORT;
+	score += wsVulkanCheckDeviceRayTracingExtensionSupport(physicalDevice) * 2000;
 	
-	// Program cannot function without proper swapchain support!
 	wsVulkanQuerySwapChainSupport();
 	if(vk->swapchain.supportedFormatCount <= 0 || vk->swapchain.supportedPresentModeCount <= 0)
 		return NO_SWAPCHAIN_SUPPORT;
 	
-	// If these are the same queue family, this could increase performance (unlikely to execute in parallel).
-	score += indices.graphicsFamilyIndex == indices.presentFamilyIndex ? 1000 : 0;
-	// If these are separate queue families, this WILL increase performance (likely to execute in parallal).
-	score += indices.graphicsFamilyIndex != indices.transferFamilyIndex ? 2000 : 0;
-	
-	// Prefer discrete GPU.  If the max texture size is much lower on the discrete card, it might be too old and suck.
-	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 0;
+	score += device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1500 : 0;
+	score += indices.graphicsFamilyIndex == indices.presentFamilyIndex ? 1000 : 0;	// If these are the same queue family, this could increase performance (unlikely to execute in parallel).
+	score += indices.graphicsFamilyIndex != indices.transferFamilyIndex ? 2000 : 0;	// If these are separate queue families, this WILL increase performance (likely to execute in parallel).
 	score += device_properties.limits.maxImageDimension2D;
+	score += device_properties.limits.maxPushConstantsSize;
 	
 	return score;
 }
 
+uint32_t wsVulkanEnumerateDeviceExtentions(VkPhysicalDevice* physicalDevice, VkExtensionProperties** availableExtensions)
+{
+	uint32_t availableExtensionCount;
+	vkEnumerateDeviceExtensionProperties(*physicalDevice, NULL, &availableExtensionCount, NULL);
+	
+	*availableExtensions = (VkExtensionProperties*)malloc(availableExtensionCount * sizeof(VkExtensionProperties));
+	vkEnumerateDeviceExtensionProperties(*physicalDevice, NULL, &availableExtensionCount, *availableExtensions);
+	
+	return availableExtensionCount;
+}
+
 bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice)
 {
-	uint32_t num_available_extensions;
-	vkEnumerateDeviceExtensionProperties(*physicalDevice, NULL, &num_available_extensions, NULL);
+	VkExtensionProperties* availableExtensions;
+	uint32_t availableExtensionCount = wsVulkanEnumerateDeviceExtentions(physicalDevice, &availableExtensions);
 	
-	VkExtensionProperties* available_extensions = malloc(num_available_extensions * sizeof(VkExtensionProperties));
-	vkEnumerateDeviceExtensionProperties(*physicalDevice, NULL, &num_available_extensions, available_extensions);
-
 	uint32_t num_required_extensions = 1;
 	const char* required_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 	bool requiredExtensionsSupported = true;
@@ -2157,9 +2161,9 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice)
 	{
 		bool has_found_extension = false;
 		
-		for(uint32_t j = 0; j < num_available_extensions; j++)
+		for(uint32_t j = 0; j < availableExtensionCount; j++)
 		{
-			if(strcmp(required_extensions[i], available_extensions[j].extensionName) == 0)
+			if(strcmp(required_extensions[i], availableExtensions[j].extensionName) == 0)
 				{has_found_extension = true; break;}
 		}
 
@@ -2173,41 +2177,55 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice)
 	if(requiredExtensionsSupported)
 		{printf("\tAll required device-specific extensions are supported by your GPU!\n");}
 	
-	uint32_t optionalExtensionCount = 1;
-	const char* optionalExtensions[] = {"VK_KHR_ray_tracing_pipeline"};
-	bool optionalExtensionsSupported = true;
-	vk->supportsRaytracing = true;
+	free(availableExtensions);	// BUG: Maybe a memory issue here?
+
+	return requiredExtensionsSupported;
+}
+
+bool wsVulkanCheckDeviceRayTracingExtensionSupport(VkPhysicalDevice* physicalDevice)
+{
+	VkExtensionProperties* availableExtensions;
+	uint32_t availableExtensionCount = wsVulkanEnumerateDeviceExtentions(physicalDevice, &availableExtensions);
 	
-	printf("\t%i device-specific extensions preferred: ", optionalExtensionCount);
-	for(int32_t i = 0; i < optionalExtensionCount; i++)
-		{ printf("\t%s", optionalExtensions[i]); }
+	uint32_t rayTracingExtensionCount = 3;
+	const char* rayTracingExtensions[] = 
+	{
+		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 
+		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+	};
+	bool rayTracingExtensionsSupported = true;
+	vk->supportsRayTracing = true;
+	
+	printf("\t%i device-specific ray tracing extensions preferred: ", rayTracingExtensionCount);
+	for(int32_t i = 0; i < rayTracingExtensionCount; i++)
+		{ printf("\t%s", rayTracingExtensions[i]); }
 	printf("\n");
 	
-	for(uint32_t i = 0; i < optionalExtensionCount; i++)
+	for(uint32_t i = 0; i < rayTracingExtensionCount; i++)
 	{
 		bool hasFoundExtension = false;
 		
-		for(uint32_t j = 0; j < num_available_extensions; j++)
+		for(uint32_t j = 0; j < availableExtensionCount; j++)
 		{
-			if(strcmp(optionalExtensions[i], available_extensions[j].extensionName) == 0)
+			if(strcmp(rayTracingExtensions[i], availableExtensions[j].extensionName) == 0)
 				{hasFoundExtension = true; break;}
 		}
 
 		if(!hasFoundExtension)
 		{
-			printf("\tWARNING: Optional device extension \"%s\" is not supported by your GPU!\n", optionalExtensions[i]);
-			
-			if(strcmp(optionalExtensions[i], "VK_KHR_ray_tracing_pipeline") == 0)
-				{vk->supportsRaytracing = false;}
-			
-			optionalExtensionsSupported = false;
+			printf("\tWARNING: Optional device ray tracing extension \"%s\" is not supported by your GPU!\n", rayTracingExtensions[i]);
+			vk->supportsRayTracing = false;
+			rayTracingExtensionsSupported = false;
 		}
 	}
 	
-	if(optionalExtensionsSupported)
-		{printf("\tAll optional device-specific extensions are supported by your GPU!\n");}
-
-	return requiredExtensionsSupported;
+	if(rayTracingExtensionsSupported)
+		{printf("\tAll device-specific ray tracing extensions are supported by your GPU!\n");}
+	
+	free(availableExtensions);	// Bug: Maybe a memory issue?
+	
+	return rayTracingExtensionsSupported;
 }
 
 VkSampleCountFlagBits wsVulkanGetMaxMSAASampleCount()

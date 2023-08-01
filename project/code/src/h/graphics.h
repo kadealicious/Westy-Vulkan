@@ -137,7 +137,7 @@ typedef struct wsVulkan
 	wsTexture		testTexture;
 	wsMesh			testMesh;
 	
-	bool supportsRaytracing;
+	bool supportsRayTracing;
 }
 wsVulkan;
 
