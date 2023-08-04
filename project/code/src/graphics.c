@@ -72,7 +72,7 @@ void wsVulkanDestroySwapChain();
 void wsVulkanChooseSwapSurfaceFormat(wsSwapChain* swapchain_info);
 void wsVulkanChooseSwapExtent();
 void wsVulkanChooseSwapPresentMode(wsSwapChain* swapchain_info);
-void wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult);
+bool wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult, bool ignoreSuboptimal, bool ignoreFramebufferResize);	// Returns if we need to stop drawing.
 uint32_t wsVulkanCreateSwapChainImageViews();		// returns number of image views created successfully.
 VkResult wsVulkanCreateSwapChainFramebuffers();		// Creates framebuffers that reference swap chain's image views representing image attachments (color, depth, etc.).
 VkResult wsVulkanCreateSurface();					// Creates a surface for drawing to our GLFW window.
@@ -209,7 +209,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 
 VkResult wsVulkanDrawFrame(double delta_time)
 {
-	// Wait for any important GPU tasks to finish up first.
+	// Wait for any GPU tasks for the current frame to finish up before continuing.
 	vkWaitForFences(vk->logicalDevice, 1, &vk->inFlightFences[vk->swapchain.currentFrame], VK_TRUE, UINT64_MAX);
 	
 	uint32_t img_ndx;
@@ -223,74 +223,64 @@ VkResult wsVulkanDrawFrame(double delta_time)
 		&img_ndx
 	);
 	
-	wsVulkanVerifySwapChainConfiguration(result);
-	if(result != VK_SUCCESS)
+	if(wsVulkanVerifySwapChainConfiguration(result, true, true))
 		return result;
 	
-	// This may be the incorrect argument; try "image_ndx"?
 	wsVulkanUpdateUniformBuffer(vk->swapchain.currentFrame, delta_time);
 	
-	// Reset fences and command buffer, then record all drawing commands.
-	VkCommandBuffer* currentCmdBuffer = &vk->swapchain.cmdBuffers[vk->swapchain.currentFrame];
 	vkResetFences(vk->logicalDevice, 1, &vk->inFlightFences[vk->swapchain.currentFrame]);
+	
+	VkCommandBuffer* currentCmdBuffer = &vk->swapchain.cmdBuffers[vk->swapchain.currentFrame];
 	vkResetCommandBuffer(*currentCmdBuffer, 0);
-	
 	vk->globalPushConstants.time += (float)delta_time;
-	
 	wsVulkanRecordCommandBuffer(currentCmdBuffer, (void*)&vk->globalPushConstants, img_ndx);
 	
 	// Create configuration for queue submission & synchronization.
-	VkSubmitInfo submit_info			= {};
-	submit_info.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.commandBufferCount		= 1;
-	submit_info.pCommandBuffers			= currentCmdBuffer;
-	VkSemaphore wait_semaphores[]		= {vk->imageAvailableSemaphores[vk->swapchain.currentFrame]};
-	VkPipelineStageFlags wait_stages[]	= {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-	submit_info.waitSemaphoreCount		= 1;
-	submit_info.pWaitSemaphores			= wait_semaphores;
-	submit_info.pWaitDstStageMask		= wait_stages;
-	VkSemaphore signal_semaphores[]		= {vk->renderFinishSemaphores[vk->swapchain.currentFrame]};
-	submit_info.signalSemaphoreCount	= 1;
-	submit_info.pSignalSemaphores		= signal_semaphores;
-	
-	// Submit queue to be executed by Vulkan.
+	VkSubmitInfo submit_info				= {};
+	VkSemaphore waitToRenderSemaphores[]	= {vk->imageAvailableSemaphores[vk->swapchain.currentFrame]};
+	VkSemaphore renderFinishSemaphores[]	= {vk->renderFinishSemaphores[vk->swapchain.currentFrame]};
+	VkPipelineStageFlags waitStages			= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	submit_info.sType						= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount			= 1;
+	submit_info.waitSemaphoreCount			= 1;
+	submit_info.signalSemaphoreCount		= 1;
+	submit_info.pCommandBuffers				= &currentCmdBuffer[0];
+	submit_info.pWaitSemaphores				= &waitToRenderSemaphores[0];
+	submit_info.pSignalSemaphores			= &renderFinishSemaphores[0];
+	submit_info.pWaitDstStageMask			= &waitStages;
 	result = vkQueueSubmit(vk->queues.graphicsQueue, 1, &submit_info, vk->inFlightFences[vk->swapchain.currentFrame]);
 	wsVulkanPrintQuiet("draw command buffer submission", NONE, NONE, NONE, result);
 	
-	// Configure presentation specification.
 	VkPresentInfoKHR present_info	= {};
+	VkSwapchainKHR swapchains[]		= {vk->swapchain.sc};
 	present_info.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	present_info.waitSemaphoreCount	= 1;
-	present_info.pWaitSemaphores	= signal_semaphores;
-	VkSwapchainKHR swapchains[]		= {vk->swapchain.sc};
 	present_info.swapchainCount		= 1;
-	present_info.pSwapchains		= swapchains;
+	present_info.pWaitSemaphores	= &renderFinishSemaphores[0];
+	present_info.pSwapchains		= &swapchains[0];
 	present_info.pImageIndices		= &img_ndx;
 	present_info.pResults			= NULL;
-	
-	// DRAW!!!  TO!!!!!!  SCREEN!!!!!!!!!  AAAAAAAAAHHHHHHHHH!!!!!!!!!!!!!!!!!!
 	result = vkQueuePresentKHR(vk->queues.presentQueue, &present_info);
 	
+	if(wsVulkanVerifySwapChainConfiguration(result, false, false))
+		return result;
+	
+	// Loop around to the next frame in the swapchain.
+	vk->swapchain.currentFrame = (vk->swapchain.currentFrame + 1) % WS_MAX_FRAMES_IN_FLIGHT;
+		
+	return VK_SUCCESS;
+}
+
+bool wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult, bool ignoreSuboptimal, bool ignoreFramebufferResize)
+{
 	if(vk->swapchain.framebufferHasResized)
 	{
 		vk->swapchain.framebufferHasResized = false;
 		printf("WARNING: Vulkan framebuffer found to be wrong size while presenting image; recreating!\n");
 		wsVulkanRecreateSwapChain();
-		return result;
+		return true;
 	}
-
-	// Is it necessary to check this again?  Find out!
-	// Update: It is.
-	wsVulkanVerifySwapChainConfiguration(result);
 	
-	// Loop around to the next frame in the swapchain.
-	vk->swapchain.currentFrame = (vk->swapchain.currentFrame + 1) % WS_MAX_FRAMES_IN_FLIGHT;
-	
-	return VK_SUCCESS;
-}
-
-void wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult)
-{
 	switch(lastImageOperationResult)
 	{
 		case VK_SUCCESS: 
@@ -299,17 +289,21 @@ void wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult)
 		case VK_ERROR_OUT_OF_DATE_KHR: 
 			printf("WARNING: Vulkan swap chain configuration found to be out of date while presenting image; recreating!\n");
 			wsVulkanRecreateSwapChain();
-			return;	// result;
+			return true;
 		
 		case VK_SUBOPTIMAL_KHR: 
+			if(ignoreSuboptimal)
+				return false;
 			printf("WARNING: Vulkan swap chain configuration found to be suboptimal while presenting image; recreating!\n");
 			wsVulkanRecreateSwapChain();
-			return;	// result;
+			return true;
 		
 		default: 
 			printf("ERROR: Vulkan swap chain failed to present image with result code %i!", lastImageOperationResult);
-			return;	// result;
+			return true;
 	}
+	
+	return false;
 }
 
 void wsVulkanTerminate()
@@ -665,7 +659,7 @@ VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkForm
 	view_info.subresourceRange.layerCount = 1;
 	
 	VkResult result = vkCreateImageView(vk->logicalDevice, &view_info, NULL, image_view);
-	wsVulkanPrint("image view creation", (intptr_t)image_view, NONE, NONE, result);
+	wsVulkanPrintQuiet("image view creation", (intptr_t)image_view, NONE, NONE, result);
 	return result;
 }
 
