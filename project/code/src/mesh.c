@@ -36,8 +36,8 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 	
 	struct cgltf_mesh* currentMesh = &data->meshes[0];
 	
-	printf("Mesh's buffer view count: %llu\n", data->buffer_views_count);
-	printf("Loading mesh primitives into memory: \n");
+	printf("INFO: Mesh's buffer view count: %llu\n", data->buffer_views_count);
+	printf("INFO: Loading mesh primitives into memory: \n");
 	
 	for(uint32_t i = 0; i < currentMesh->primitives_count; i++)
 	{

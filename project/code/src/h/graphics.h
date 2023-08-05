@@ -19,8 +19,7 @@
 #define WS_MAX_RENDER_OBJECTS			150
 
 #define WS_MAX_DESCRIPTOR_BUFFERS		100
-#define WS_MAX_UNIQUE_DESCRIPTOR_SETS	1
-#define WS_MAX_DESCRIPTOR_SETS			2	// Equal to the frames in-flight * number of unique descriptor sets.
+#define WS_MAX_DESCRIPTOR_SETS			2	// TODO: Make this 4.  Equal to the frames in-flight * number of unique descriptor sets.
 
 #define WS_MAX_FRAMES_IN_FLIGHT			2
 
