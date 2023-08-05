@@ -195,7 +195,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	wsVulkanCreateCommandPool();				// Used for executing commands sent via command buffer.
 	vk->testTexture = *wsTextureInit(&vk->logicalDevice);
 	wsVulkanCreateTextureSampler();				// Creates a texture sampler for use with ALL textures!
-	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom.gltf", "textures/vikingroom.png");
+	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom/vikingroom.gltf", "models/vikingroom/vikingroom.png");
 	wsVulkanCreateVertexBuffer(&vk->testMesh);	// Must be done after the pipeline is created.
 	wsVulkanCreateIndexBuffer(&vk->testMesh);	// "" "" "" "" "" "" "" "" "" "" "" "" "" "" 
 	wsVulkanCreateUniformBuffers();
