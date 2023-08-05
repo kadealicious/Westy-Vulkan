@@ -236,18 +236,18 @@ VkResult wsVulkanDrawFrame(double delta_time)
 	wsVulkanRecordCommandBuffer(currentCmdBuffer, (void*)&vk->globalPushConstants, img_ndx);
 	
 	// Create configuration for queue submission & synchronization.
-	VkSubmitInfo submit_info				= {};
-	VkSemaphore waitToRenderSemaphores[]	= {vk->imageAvailableSemaphores[vk->swapchain.currentFrame]};
-	VkSemaphore renderFinishSemaphores[]	= {vk->renderFinishSemaphores[vk->swapchain.currentFrame]};
-	VkPipelineStageFlags waitStages			= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	submit_info.sType						= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit_info.commandBufferCount			= 1;
-	submit_info.waitSemaphoreCount			= 1;
-	submit_info.signalSemaphoreCount		= 1;
-	submit_info.pCommandBuffers				= &currentCmdBuffer[0];
-	submit_info.pWaitSemaphores				= &waitToRenderSemaphores[0];
-	submit_info.pSignalSemaphores			= &renderFinishSemaphores[0];
-	submit_info.pWaitDstStageMask			= &waitStages;
+	VkSubmitInfo submit_info			= {};
+	VkSemaphore waitSemaphores[]		= {vk->imageAvailableSemaphores[vk->swapchain.currentFrame]};
+	VkSemaphore signalSemaphores[]		= {vk->renderFinishSemaphores[vk->swapchain.currentFrame]};
+	VkPipelineStageFlags waitStages		= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	submit_info.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit_info.commandBufferCount		= 1;
+	submit_info.waitSemaphoreCount		= 1;
+	submit_info.signalSemaphoreCount	= 1;
+	submit_info.pCommandBuffers			= &currentCmdBuffer[0];
+	submit_info.pWaitSemaphores			= &waitSemaphores[0];
+	submit_info.pSignalSemaphores		= &signalSemaphores[0];
+	submit_info.pWaitDstStageMask		= &waitStages;
 	result = vkQueueSubmit(vk->queues.graphicsQueue, 1, &submit_info, vk->inFlightFences[vk->swapchain.currentFrame]);
 	wsVulkanPrintQuiet("draw command buffer submission", NONE, NONE, NONE, result);
 	
@@ -256,7 +256,7 @@ VkResult wsVulkanDrawFrame(double delta_time)
 	present_info.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	present_info.waitSemaphoreCount	= 1;
 	present_info.swapchainCount		= 1;
-	present_info.pWaitSemaphores	= &renderFinishSemaphores[0];
+	present_info.pWaitSemaphores	= &signalSemaphores[0];
 	present_info.pSwapchains		= &swapchains[0];
 	present_info.pImageIndices		= &img_ndx;
 	present_info.pResults			= NULL;
@@ -273,7 +273,7 @@ VkResult wsVulkanDrawFrame(double delta_time)
 
 bool wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult, bool ignoreSuboptimal, bool ignoreFramebufferResize)
 {
-	if(vk->swapchain.framebufferHasResized)
+	if(!ignoreFramebufferResize && vk->swapchain.framebufferHasResized)
 	{
 		vk->swapchain.framebufferHasResized = false;
 		printf("WARNING: Vulkan framebuffer found to be wrong size while presenting image; recreating!\n");
@@ -571,7 +571,7 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels
 	image_info.samples = MSAASamples;
 	image_info.flags = 0;	// Optional.
 	VkResult result = vkCreateImage(vk->logicalDevice, &image_info, NULL, image);
-	wsVulkanPrint("image creation", (uintptr_t)image, NONE, NONE, result);
+	wsVulkanPrintQuiet("image creation", (uintptr_t)image, NONE, NONE, result);
 	
 	// Specify memory requirements for image.
 	VkMemoryRequirements memory_requirements;
@@ -582,7 +582,7 @@ VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels
 	alloc_info.allocationSize = memory_requirements.size;
 	alloc_info.memoryTypeIndex = wsVulkanFindMemoryType(memory_requirements.memoryTypeBits, properties);
 	result = vkAllocateMemory(vk->logicalDevice, &alloc_info, NULL, image_memory);
-	wsVulkanPrint("image memory allocation", (uintptr_t)image_memory, NONE, NONE, result);
+	wsVulkanPrintQuiet("image memory allocation", (uintptr_t)image_memory, NONE, NONE, result);
 	
 	result = vkBindImageMemory(vk->logicalDevice, *image, *image_memory, 0);
 	return result;
@@ -1313,7 +1313,7 @@ VkResult wsVulkanCreateSwapChainFramebuffers()
 			break;
 	}
 	
-	printf("INFO: %i/%i Vulkan framebuffers created!\n", vk->swapchain.imageCount, vk->swapchain.imageCount);
+	// printf("INFO: %i/%i Vulkan framebuffers created!\n", vk->swapchain.imageCount, vk->swapchain.imageCount);
 	return result;
 }
 
@@ -1633,8 +1633,7 @@ uint32_t wsVulkanCreateSwapChainImageViews()
 	
 	if(num_created != vk->swapchain.imageCount)
 		{ printf("ERROR: Only %i/%i image views created!\n", num_created, vk->swapchain.imageCount); }
-	else 
-		{ printf("INFO: %i/%i Vulkan image views created!\n", num_created, vk->swapchain.imageCount); }
+	// else { printf("INFO: %i/%i Vulkan image views created!\n", num_created, vk->swapchain.imageCount); }
 	
 	return num_created;
 }
@@ -1712,12 +1711,14 @@ void wsVulkanRecreateSwapChain()
 	vkDeviceWaitIdle(vk->logicalDevice);
 	
 	// Destroy & recreate the swap chain and its derivative components.
+	printf("\n");
 	wsVulkanDestroySwapChain();
 	wsVulkanCreateSwapChain();
 	wsVulkanCreateSwapChainImageViews();
 	wsVulkanCreateColorResources();
 	wsVulkanCreateDepthResources();
 	wsVulkanCreateSwapChainFramebuffers();
+	printf("\n");
 }
 
 void wsVulkanDestroySwapChain()
@@ -1726,23 +1727,24 @@ void wsVulkanDestroySwapChain()
 	for(uint32_t i = 0; i < vk->swapchain.imageCount; i++)
 		{ vkDestroyFramebuffer(vk->logicalDevice, vk->swapchain.framebuffers[i], NULL); }
 	free(vk->swapchain.framebuffers);
-	printf("INFO: Vulkan framebuffers destroyed!\n");
+	// printf("INFO: Vulkan framebuffers destroyed!\n");
 	
 	wsTextureDestroy(&vk->swapchain.colorTexture);
 	wsTextureDestroy(&vk->swapchain.depthTexture);
-	printf("INFO: Vulkan depth buffer destroyed!\n");
+	// printf("INFO: Vulkan depth buffer destroyed!\n");
 	
 	// Destroy swap chain image views.
 	for(uint32_t i = 0; i < vk->swapchain.imageCount; i++)
 		{ vkDestroyImageView(vk->logicalDevice, vk->swapchain.imageViews[i], NULL); }
 	free(vk->swapchain.imageViews);
-	printf("INFO: Vulkan image views destroyed!\n");
+	// printf("INFO: Vulkan image views destroyed!\n");
 
 	// Destroy swap chain.
 	vkDestroySwapchainKHR(vk->logicalDevice, vk->swapchain.sc, NULL);
 	free(vk->swapchain.supportedFormats);
 	free(vk->swapchain.supportedPresentModes);
 	free(vk->swapchain.images);
+	
 	printf("INFO: Vulkan swap chain destroyed!\n");
 }
 
