@@ -15,10 +15,14 @@
 #include"camera.h"
 
 
-#define WS_MAX_FRAMES_IN_FLIGHT 2
-#define WS_MAX_VERTEX_BUFFERS 4
-#define WS_MAX_DESCRIPTOR_BUFFERS 10
-#define WS_MAX_RENDER_OBJECTS 150
+#define WS_MAX_VERTEX_BUFFERS			4
+#define WS_MAX_RENDER_OBJECTS			150
+
+#define WS_MAX_DESCRIPTOR_BUFFERS		100
+#define WS_MAX_UNIQUE_DESCRIPTOR_SETS	1
+#define WS_MAX_DESCRIPTOR_SETS			2	// Equal to the frames in-flight * number of unique descriptor sets.
+
+#define WS_MAX_FRAMES_IN_FLIGHT			2
 
 #define WS_XAXIS_INIT	{1.0f, 0.0f, 0.0f}
 #define WS_YAXIS_INIT	{0.0f, 1.0f, 0.0f}
@@ -127,6 +131,11 @@ typedef struct wsVulkan
 	VkBuffer*		uniformBuffers;
 	VkDeviceMemory*	uniformBuffersMemory;
 	void**			uniformBuffersMapped;
+	
+	VkDescriptorPool		descriptorPool;
+	VkDescriptorSet			descriptorSets[WS_MAX_DESCRIPTOR_SETS];
+	VkDescriptorSetLayout	descriptorSetLayout;	// TODO: Allow for multiple layouts.
+	uint32_t				descriptorSetCount;
 	
 	wsShader shader;
 	VkPushConstantRange globalPushConstantRange;

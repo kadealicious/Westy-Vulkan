@@ -355,10 +355,10 @@ void wsVulkanTerminate()
 	}
 	printf("INFO: All Vulkan UBOs destroyed!\n");
 	// TODO: Install Valgrind to double check that I am not leaking memory here.  I don't think I am...
-
-	vkDestroyDescriptorPool(vk->logicalDevice, vk->shader.descriptorPool, NULL);				printf("INFO: Vulkan descriptor pool destroyed!\n");
-	vkDestroyDescriptorSetLayout(vk->logicalDevice, vk->shader.descriptorSetLayout, NULL);	printf("INFO: Vulkan descriptor set layout destroyed!\n");
-	free(vk->shader.descriptorSets);
+	
+	// Destroying the pool will implicitly destroy all descriptor sets allocated from it.
+	vkDestroyDescriptorPool(vk->logicalDevice, vk->descriptorPool, NULL);			printf("INFO: Vulkan descriptor pool destroyed!\n");
+	vkDestroyDescriptorSetLayout(vk->logicalDevice, vk->descriptorSetLayout, NULL);	printf("INFO: Vulkan descriptor set layout destroyed!\n");
 	
 	vkDestroyRenderPass(vk->logicalDevice, vk->renderPass, NULL);	printf("INFO: Vulkan render pass destroyed!\n");
 	wsShaderUnloadAll(&vk->shader);
@@ -444,7 +444,7 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, void* pushC
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
 	vkCmdBindIndexBuffer(*commandbuffer, vk->testRenderObject.mesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 
-								0, 1, &vk->shader.descriptorSets[vk->swapchain.currentFrame], 0, NULL);
+								0, 1, &vk->descriptorSets[vk->swapchain.currentFrame], 0, NULL);
 	vkCmdPushConstants(*commandbuffer, vk->pipelineLayout, vk->globalPushConstantRange.stageFlags,
 						vk->globalPushConstantRange.offset, vk->globalPushConstantRange.size, pushConstantBlock);
 	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testRenderObject.mesh.num_indices, 1, 0, 0, 0);
@@ -1202,47 +1202,54 @@ void wsVulkanUpdateUniformBuffer(uint32_t currentFrame, double delta_time)
 	memcpy(vk->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 
-VkResult wsVulkanCreateDescriptorPool()
+VkResult wsVulkanCreateDescriptorSetLayout()
 {
-	VkDescriptorPoolSize pool_sizes[2] = {};
-	pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	pool_sizes[0].descriptorCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
-	pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	pool_sizes[1].descriptorCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
+	VkDescriptorSetLayoutBinding layoutbinding_ubo = {};
+	layoutbinding_ubo.binding = 0;
+	layoutbinding_ubo.descriptorCount = 1;
+	layoutbinding_ubo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	layoutbinding_ubo.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	layoutbinding_ubo.pImmutableSamplers = NULL;
 	
-	VkDescriptorPoolCreateInfo pool_info = {};
-	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	pool_info.poolSizeCount = 2;
-	pool_info.pPoolSizes = &pool_sizes[0];
-	pool_info.maxSets = WS_MAX_FRAMES_IN_FLIGHT;
-	pool_info.flags = 0;	// Optional.
+	VkDescriptorSetLayoutBinding layoutbinding_sampler = {};
+	layoutbinding_sampler.binding = 1;
+	layoutbinding_sampler.descriptorCount = 1;
+	layoutbinding_sampler.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	layoutbinding_sampler.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	layoutbinding_sampler.pImmutableSamplers = NULL;
 	
-	VkResult result = vkCreateDescriptorPool(vk->logicalDevice, &pool_info, NULL, &vk->shader.descriptorPool);
-	wsVulkanPrint("descriptor pool creation", NONE, NONE, NONE, result);
+	VkDescriptorSetLayoutBinding bindings[2] = {layoutbinding_ubo, layoutbinding_sampler};
+	VkDescriptorSetLayoutCreateInfo layout_info = {};
+	layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layout_info.bindingCount = 2;
+	layout_info.pBindings = &bindings[0];
+	
+	VkResult result = vkCreateDescriptorSetLayout(vk->logicalDevice, &layout_info, NULL, &vk->descriptorSetLayout);
+	wsVulkanPrint("descriptor set layouts creation", NONE, NONE, NONE, result);
 	return result;
 }
 
 VkResult wsVulkanCreateDescriptorSets()
 {
-	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSetLayout));
-	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{memcpy(&layouts[i], &vk->shader.descriptorSetLayout, sizeof(VkDescriptorSetLayout));}
+	/* Allocate 1 descriptor set layout for every 2 descriptor sets (1 descriptor set 
+		per frame in-flight to allow parallel drawing commands on separate frames). */
+	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)malloc(WS_MAX_DESCRIPTOR_SETS * sizeof(VkDescriptorSetLayout));
+	for(uint8_t i = 0; i < WS_MAX_DESCRIPTOR_SETS; i++)
+		{memcpy(&layouts[i], &vk->descriptorSetLayout, sizeof(VkDescriptorSetLayout));}
 	
 	VkDescriptorSetAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	alloc_info.descriptorPool = vk->shader.descriptorPool;
-	alloc_info.descriptorSetCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
+	alloc_info.descriptorPool = vk->descriptorPool;
+	alloc_info.descriptorSetCount = WS_MAX_DESCRIPTOR_SETS;
 	alloc_info.pSetLayouts = &layouts[0];
 	
-	vk->shader.descriptorSets = (VkDescriptorSet*)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSet));
-	
-	VkResult result = vkAllocateDescriptorSets(vk->logicalDevice, &alloc_info, &vk->shader.descriptorSets[0]);
+	VkResult result = vkAllocateDescriptorSets(vk->logicalDevice, &alloc_info, &vk->descriptorSets[0]);
 	wsVulkanPrint("descriptor set allocation", NONE, NONE, NONE, result);
 	if(result != VK_SUCCESS)
 		{return result;}
 	free(layouts);	// Causes crash?  Maybe!
 	
-	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
+	for(uint8_t i = 0; i < WS_MAX_DESCRIPTOR_SETS; i++)
 	{
 		VkWriteDescriptorSet descriptor_writes[2] = {};
 		
@@ -1251,7 +1258,7 @@ VkResult wsVulkanCreateDescriptorSets()
 		buffer_info.offset						= 0;
 		buffer_info.range						= sizeof(wsUBO);
 		descriptor_writes[0].sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptor_writes[0].dstSet				= vk->shader.descriptorSets[i];
+		descriptor_writes[0].dstSet				= vk->descriptorSets[i];
 		descriptor_writes[0].dstBinding			= 0;
 		descriptor_writes[0].dstArrayElement	= 0;
 		descriptor_writes[0].descriptorType		= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1265,7 +1272,7 @@ VkResult wsVulkanCreateDescriptorSets()
 		image_info.imageView					= vk->testRenderObject.texture.view;
 		image_info.sampler						= vk->texturesampler;
 		descriptor_writes[1].sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptor_writes[1].dstSet				= vk->shader.descriptorSets[i];
+		descriptor_writes[1].dstSet				= vk->descriptorSets[i];
 		descriptor_writes[1].dstBinding			= 1;
 		descriptor_writes[1].dstArrayElement	= 0;
 		descriptor_writes[1].descriptorType		= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1281,10 +1288,28 @@ VkResult wsVulkanCreateDescriptorSets()
 	return result;
 }
 
-void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height)
+VkResult wsVulkanCreateDescriptorPool()
 {
-	vk->swapchain.framebufferHasResized = true;
+	VkDescriptorPoolSize pool_sizes[2] = {};
+	pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	pool_sizes[0].descriptorCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
+	pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	pool_sizes[1].descriptorCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
+	
+	VkDescriptorPoolCreateInfo pool_info = {};
+	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	pool_info.poolSizeCount = 2;
+	pool_info.pPoolSizes = &pool_sizes[0];
+	pool_info.maxSets = WS_MAX_FRAMES_IN_FLIGHT;
+	pool_info.flags = 0;	// Optional.
+	
+	VkResult result = vkCreateDescriptorPool(vk->logicalDevice, &pool_info, NULL, &vk->descriptorPool);
+	wsVulkanPrint("descriptor pool creation", NONE, NONE, NONE, result);
+	return result;
 }
+
+void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height)
+	{vk->swapchain.framebufferHasResized = true;}
 
 VkResult wsVulkanCreateSwapChainFramebuffers()
 {
@@ -1403,33 +1428,6 @@ VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID)
 	VkResult result = vkCreateShaderModule(vk->logicalDevice, &createInfo, NULL, &module);
 	wsVulkanPrint("shader module creation", shaderID, NONE, NONE, result);
 	return module;
-}
-
-VkResult wsVulkanCreateDescriptorSetLayout()
-{
-	VkDescriptorSetLayoutBinding layoutbinding_ubo = {};
-	layoutbinding_ubo.binding = 0;
-	layoutbinding_ubo.descriptorCount = 1;
-	layoutbinding_ubo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	layoutbinding_ubo.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-	layoutbinding_ubo.pImmutableSamplers = NULL;
-	
-	VkDescriptorSetLayoutBinding layoutbinding_sampler = {};
-	layoutbinding_sampler.binding = 1;
-	layoutbinding_sampler.descriptorCount = 1;
-	layoutbinding_sampler.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	layoutbinding_sampler.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-	layoutbinding_sampler.pImmutableSamplers = NULL;
-	
-	VkDescriptorSetLayoutBinding bindings[2] = {layoutbinding_ubo, layoutbinding_sampler};
-	VkDescriptorSetLayoutCreateInfo layout_info = {};
-	layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layout_info.bindingCount = 2;
-	layout_info.pBindings = &bindings[0];
-	
-	VkResult result = vkCreateDescriptorSetLayout(vk->logicalDevice, &layout_info, NULL, &vk->shader.descriptorSetLayout);
-	wsVulkanPrint("descriptor set layouts creation", NONE, NONE, NONE, result);
-	return result;
 }
 
 VkResult wsVulkanCreateGraphicsPipeline()
@@ -1577,7 +1575,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	VkPipelineLayoutCreateInfo pipelinelayout_info = {};
 	pipelinelayout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelinelayout_info.setLayoutCount = 1;
-	pipelinelayout_info.pSetLayouts	= &vk->shader.descriptorSetLayout;
+	pipelinelayout_info.pSetLayouts	= &vk->descriptorSetLayout;
 	pipelinelayout_info.pushConstantRangeCount = 1;
 	pipelinelayout_info.pPushConstantRanges	= &vk->globalPushConstantRange;
 	VkResult result = vkCreatePipelineLayout(vk->logicalDevice, &pipelinelayout_info, NULL, &vk->pipelineLayout);

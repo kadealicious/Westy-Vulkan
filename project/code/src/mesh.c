@@ -46,8 +46,8 @@ void wsMeshCreate(const char* meshPath, wsMesh* mesh)
 		uint8_t texcoordIndex;
 		uint8_t normalIndex;
 		
-		printf("Mesh's accessor indices count: %llu\n", currentPrimitive->indices->count);
-		printf("Mesh's primitive %i attribute accessor indices: \n", i);
+		printf("INFO: Mesh's accessor indices count: %llu\n", currentPrimitive->indices->count);
+		printf("INFO: Mesh's primitive %i attribute accessor indices: \n", i);
 		
 		for(uint8_t j = 0; j < currentPrimitive->attributes_count; j++)
 		{
