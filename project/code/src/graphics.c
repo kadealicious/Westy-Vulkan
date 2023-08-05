@@ -1226,7 +1226,7 @@ VkResult wsVulkanCreateDescriptorSets()
 {
 	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkDescriptorSetLayout));
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{ memcpy(&layouts[i], &vk->shader.descriptorSetLayout, sizeof(VkDescriptorSetLayout)); }
+		{memcpy(&layouts[i], &vk->shader.descriptorSetLayout, sizeof(VkDescriptorSetLayout));}
 	
 	VkDescriptorSetAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1239,43 +1239,40 @@ VkResult wsVulkanCreateDescriptorSets()
 	VkResult result = vkAllocateDescriptorSets(vk->logicalDevice, &alloc_info, &vk->shader.descriptorSets[0]);
 	wsVulkanPrint("descriptor set allocation", NONE, NONE, NONE, result);
 	if(result != VK_SUCCESS)
-		{ return result; }
+		{return result;}
 	free(layouts);	// Causes crash?  Maybe!
 	
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		VkDescriptorBufferInfo buffer_info = {};
-		buffer_info.buffer = vk->uniformBuffers[i];
-		buffer_info.offset = 0;
-		buffer_info.range = sizeof(wsUBO);
-		
-		VkDescriptorImageInfo image_info = {};
-		image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		image_info.imageView = vk->testRenderObject.texture.view;
-		image_info.sampler = vk->texturesampler;
-		
-		
 		VkWriteDescriptorSet descriptor_writes[2] = {};
 		
-		descriptor_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptor_writes[0].dstSet = vk->shader.descriptorSets[i];
-		descriptor_writes[0].dstBinding = 0;
-		descriptor_writes[0].dstArrayElement = 0;
-		descriptor_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptor_writes[0].descriptorCount = 1;
-		descriptor_writes[0].pBufferInfo = &buffer_info;
-		descriptor_writes[0].pImageInfo = NULL;			// Optional.
-		descriptor_writes[0].pTexelBufferView = NULL;	// Optional.
+		VkDescriptorBufferInfo buffer_info		= {};
+		buffer_info.buffer						= vk->uniformBuffers[i];
+		buffer_info.offset						= 0;
+		buffer_info.range						= sizeof(wsUBO);
+		descriptor_writes[0].sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptor_writes[0].dstSet				= vk->shader.descriptorSets[i];
+		descriptor_writes[0].dstBinding			= 0;
+		descriptor_writes[0].dstArrayElement	= 0;
+		descriptor_writes[0].descriptorType		= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptor_writes[0].descriptorCount	= 1;
+		descriptor_writes[0].pBufferInfo		= &buffer_info;
+		descriptor_writes[0].pImageInfo			= NULL;	// Optional.
+		descriptor_writes[0].pTexelBufferView	= NULL;	// Optional.
 		
-		descriptor_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptor_writes[1].dstSet = vk->shader.descriptorSets[i];
-		descriptor_writes[1].dstBinding = 1;
-		descriptor_writes[1].dstArrayElement = 0;
-		descriptor_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		descriptor_writes[1].descriptorCount = 1;
-		descriptor_writes[1].pImageInfo = &image_info;
-		descriptor_writes[1].pBufferInfo = NULL;			// Optional.
-		descriptor_writes[1].pTexelBufferView = NULL;	// Optional.
+		VkDescriptorImageInfo image_info		= {};
+		image_info.imageLayout					= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		image_info.imageView					= vk->testRenderObject.texture.view;
+		image_info.sampler						= vk->texturesampler;
+		descriptor_writes[1].sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptor_writes[1].dstSet				= vk->shader.descriptorSets[i];
+		descriptor_writes[1].dstBinding			= 1;
+		descriptor_writes[1].dstArrayElement	= 0;
+		descriptor_writes[1].descriptorType		= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descriptor_writes[1].descriptorCount	= 1;
+		descriptor_writes[1].pImageInfo			= &image_info;
+		descriptor_writes[1].pBufferInfo		= NULL;	// Optional.
+		descriptor_writes[1].pTexelBufferView	= NULL;	// Optional.
 		
 		
 		vkUpdateDescriptorSets(vk->logicalDevice, 2, &descriptor_writes[0], 0, NULL);

@@ -8,6 +8,7 @@
 #include<vulkan/vulkan.h>
 
 #define NUM_MAX_SHADERS 100
+#define WS_MAX_DESCRIPTOR_SETS 4	// Minimum guaranteed descriptor set count.
 
 typedef struct wsShader
 {
