@@ -13,6 +13,7 @@
 #include"mesh.h"
 #include"texture.h"
 #include"camera.h"
+#include"raytracing.h"
 
 
 #define WS_MAX_VERTEX_BUFFERS			4
@@ -153,7 +154,8 @@ typedef struct wsVulkan
 	wsTexture		testTexture;
 	wsMesh			testMesh;
 	
-	bool supportsRayTracing;
+	bool			supportsRayTracing;
+	wsRayTracing	rayTracing;
 }
 wsVulkan;
 
@@ -173,6 +175,7 @@ VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* imageView, VkForma
 
 void wsVulkanSetDebug(uint8_t debugMode);
 float wsVulkanGetAspectRatio();
+uint32_t wsVulkanEnumerateDeviceExtentions(VkPhysicalDevice* physicalDevice, VkExtensionProperties** availableExtensions);
 
 
 #endif

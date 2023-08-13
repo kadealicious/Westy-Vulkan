@@ -119,9 +119,6 @@ VkResult wsVulkanCreateIndexBuffer(wsMesh* mesh);
 VkResult wsVulkanCreateUniformBuffers();
 void wsVulkanUpdateUniformBuffer(uint32_t currentFrame, double delta_time);
 
-// Who needs shadow maps?
-bool wsVulkanCheckDeviceRayTracingExtensionSupport(VkPhysicalDevice* physicalDevice);
-
 // Vulkan proxy functions.
 VkResult wsVulkanCreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* createInfo, const VkAllocationCallbacks* allocator, VkDebugUtilsMessengerEXT* debugMessenger);
 void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* allocator);
@@ -130,8 +127,31 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageS
 // Extras.
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height);	// Passed to GLFW for the window resize event.
 float wsVulkanGetAspectRatio();
-void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result);		// Always prints.
-void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result);	// Only prints on error.
+
+#define WS_VULKAN_CHECK_RESULT(str, result)																\
+			if(result != VK_SUCCESS)																	\
+				{printf("ERRR: Vulkan %s operation failed w/ code %i!\n", str, result); return result;}	\
+			else {printf("INFO: Vulkan %s operation success!\n", str);}
+#define WS_VULKAN_CHECK_RESULT_QUIET(str, result)														\
+			if(result != VK_SUCCESS)																	\
+				{printf("ERRR: Vulkan %s operation failed w/ code %i!\n", str, result); return result;}
+
+#define WS_VULKAN_CHECK_RESULT_NO_RETURN(str, result)													\
+			if(result != VK_SUCCESS)																	\
+				{printf("ERRR: Vulkan %s operation failed w/ code %i!\n", str, result);}				\
+			else {printf("INFO: Vulkan %s operation success!\n", str);}
+#define WS_VULKAN_CHECK_RESULT_NO_RETURN_QUIET(str, result)												\
+			if(result != VK_SUCCESS)																	\
+				{printf("WARN: Vulkan %s operation failed w/ code %i!\n", str, result);}
+
+#define WS_VULKAN_RETURN_RESULT(str, result)															\
+			if(result != VK_SUCCESS)																	\
+				{printf("ERRR: Vulkan %s operation failed w/ code %i!\n", str, result);	return result;}	\
+			else {printf("INFO: Vulkan %s operation success!\n", str);					return result;}
+#define WS_VULKAN_RETURN_RESULT_QUIET(str, result)														\
+			if(result != VK_SUCCESS)																	\
+				{printf("ERRR: Vulkan %s operation failed w/ code %i!\n", str, result); return result;}	\
+			else {return result;}
 
 
 // Call after wsWindowInit().
@@ -140,11 +160,9 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	wsVulkanSetDebug(isDebug);
 	
 	// Non-Vulkan-specific initialization stuff.
-	vk = vulkan_data;								// Initialized in main.c.
-	vk->swapchain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-	vk->swapchain.framebufferHasResized = false;	// Ensure framebuffer is not immediately and unnecessarily resized.
-	vk->supportsRayTracing = false;
-	vk->windowID = windowID;																		// Specify which window we will be rendering to.
+	vk									= vulkan_data;				// Initialized in main.c.
+	vk->swapchain.framebufferHasResized	= false;					// Ensure framebuffer is not immediately and unnecessarily resized.
+	vk->windowID						= windowID;					// Specify which window we will be rendering to.
 	glfwSetWindowUserPointer(wsWindowGetPtr(windowID), vk);											// Set the window user to our vulkan data.
 	glfwSetFramebufferSizeCallback(wsWindowGetPtr(windowID), wsVulkanFramebufferResizeCallback);	// Allow Vulkan to resize its framebuffer when the window resizes.
 
@@ -176,10 +194,10 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	}
 	
 	// Create Vulkan instance!
-	VkResult result = vkCreateInstance(&createInfo, NULL, &vk->instance);
-	wsVulkanPrint("instance creation", NONE, NONE, NONE, result);
+	WS_VULKAN_CHECK_RESULT_NO_RETURN("instance creation", vkCreateInstance(&createInfo, NULL, &vk->instance));
 	
 	if(debug)	{wsVulkanInitDebugMessenger();}
+	
 	wsVulkanCreateSurface();					// Creates window surface for drawing.
 	wsVulkanPickPhysicalDevice();				// Physical device == GPU.
 	wsVulkanCreateLogicalDevice(createInfo.enabledLayerCount, createInfo.ppEnabledLayerNames);
@@ -196,6 +214,7 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	vk->testTexture = *wsTextureInit(&vk->logicalDevice);
 	wsVulkanCreateTextureSampler();				// Creates a texture sampler for use with ALL textures!
 	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom/vikingroom.gltf", "models/vikingroom/vikingroom.png");
+	// vk->testRenderObject = *wsVulkanCreateRenderObject("models/avocado/Avocado.gltf", "models/avocado/Avocado_color.png");
 	wsVulkanCreateVertexBuffer(&vk->testMesh);	// Must be done after the pipeline is created.
 	wsVulkanCreateIndexBuffer(&vk->testMesh);	// "" "" "" "" "" "" "" "" "" "" "" "" "" "" 
 	wsVulkanCreateUniformBuffers();
@@ -204,6 +223,9 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	wsVulkanCreateCommandBuffers();		// Used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects();		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
 	
+	vk->supportsRayTracing		= wsRayTracingCheckDeviceExtensionSupport(&vk->physicalDevice);
+	if(vk->supportsRayTracing)	{wsRayTracingInit(&vk->rayTracing);}
+
 	printf("---END VULKAN INITIALIZATION---\n");
 }
 
@@ -248,8 +270,14 @@ VkResult wsVulkanDrawFrame(double delta_time)
 	submit_info.pWaitSemaphores			= &waitSemaphores[0];
 	submit_info.pSignalSemaphores		= &signalSemaphores[0];
 	submit_info.pWaitDstStageMask		= &waitStages;
-	result = vkQueueSubmit(vk->queues.graphicsQueue, 1, &submit_info, vk->inFlightFences[vk->swapchain.currentFrame]);
-	wsVulkanPrintQuiet("draw command buffer submission", NONE, NONE, NONE, result);
+	WS_VULKAN_CHECK_RESULT_QUIET("draw command buffer submission", 
+		vkQueueSubmit
+		(
+			vk->queues.graphicsQueue, 
+			1, &submit_info, 
+			vk->inFlightFences[vk->swapchain.currentFrame]
+		)
+	);
 	
 	VkPresentInfoKHR present_info	= {};
 	VkSwapchainKHR swapchains[]		= {vk->swapchain.sc};
@@ -276,7 +304,7 @@ bool wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult, boo
 	if(!ignoreFramebufferResize && vk->swapchain.framebufferHasResized)
 	{
 		vk->swapchain.framebufferHasResized = false;
-		printf("WARNING: Vulkan framebuffer found to be wrong size while presenting image; recreating!\n");
+		printf("WARN: Vulkan framebuffer found to be wrong size while presenting image; recreating!\n");
 		wsVulkanRecreateSwapChain();
 		return true;
 	}
@@ -287,19 +315,19 @@ bool wsVulkanVerifySwapChainConfiguration(VkResult lastImageOperationResult, boo
 			break;
 			
 		case VK_ERROR_OUT_OF_DATE_KHR: 
-			printf("WARNING: Vulkan swap chain configuration found to be out of date while presenting image; recreating!\n");
+			printf("WARN: Vulkan swap chain configuration found to be out of date while presenting image; recreating!\n");
 			wsVulkanRecreateSwapChain();
 			return true;
 		
 		case VK_SUBOPTIMAL_KHR: 
 			if(ignoreSuboptimal)
 				return false;
-			printf("WARNING: Vulkan swap chain configuration found to be suboptimal while presenting image; recreating!\n");
+			printf("WARN: Vulkan swap chain configuration found to be suboptimal while presenting image; recreating!\n");
 			wsVulkanRecreateSwapChain();
 			return true;
 		
 		default: 
-			printf("ERROR: Vulkan swap chain failed to present image with result code %i!", lastImageOperationResult);
+			printf("ERRR: Vulkan swap chain failed to present image with result code %i!", lastImageOperationResult);
 			return true;
 	}
 	
@@ -314,18 +342,17 @@ void wsVulkanTerminate()
 	printf("\n---BEGIN VULKAN TERMINATION---\n");
 	
 	if(debug)
-	{
-		wsVulkanStopDebugMessenger();
-	}
+		{wsVulkanStopDebugMessenger();}
 	
 	// Destroy all sync objects.
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{ vkDestroySemaphore(vk->logicalDevice, vk->imageAvailableSemaphores[i], NULL);	printf("INFO: Vulkan \"image available?\" semaphore %i/%i destroyed!\n", (i + 1), WS_MAX_FRAMES_IN_FLIGHT); }
+		{vkDestroySemaphore(vk->logicalDevice, vk->imageAvailableSemaphores[i], NULL);}
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{ vkDestroySemaphore(vk->logicalDevice, vk->renderFinishSemaphores[i], NULL);	printf("INFO: Vulkan \"render finished?\" semaphore %i/%i destroyed!\n", (i + 1), WS_MAX_FRAMES_IN_FLIGHT); }
+		{vkDestroySemaphore(vk->logicalDevice, vk->renderFinishSemaphores[i], NULL);}
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{ vkDestroyFence(vk->logicalDevice, vk->inFlightFences[i], NULL);					printf("INFO: Vulkan \"in flight?\" fence %i/%i destroyed!\n", (i + 1), WS_MAX_FRAMES_IN_FLIGHT); }
-	
+		{vkDestroyFence(vk->logicalDevice, vk->inFlightFences[i], NULL);}
+	WS_VULKAN_CHECK_RESULT_NO_RETURN("sync object destruction", VK_SUCCESS);
+
 	// Free memory associated with queue families.
 	free(vk->queues.uniqueQueueFamilyIndices);
 	
@@ -372,24 +399,42 @@ void wsVulkanTerminate()
 VkResult wsVulkanCreateSyncObjects()
 {
 	// Resize arrays to hold all required semaphores & fences.
-	vk->imageAvailableSemaphores= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
-	vk->renderFinishSemaphores	= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
-	vk->inFlightFences			= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkFence));
+	vk->imageAvailableSemaphores	= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->renderFinishSemaphores		= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkSemaphore));
+	vk->inFlightFences				= malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkFence));
 	
-	VkSemaphoreCreateInfo semaphore_info = {};
-	semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	VkSemaphoreCreateInfo semaphore_info	= {};
+	semaphore_info.sType					= VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	
-	VkFenceCreateInfo fence_info = {};
-	fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;		// Prevents first call to wsVulkanDrawFrame() from hanging up on an unsignaled fence.
+	VkFenceCreateInfo fence_info	= {};
+	fence_info.sType				= VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fence_info.flags				= VK_FENCE_CREATE_SIGNALED_BIT;		// Prevents first call to wsVulkanDrawFrame() from hanging up on an unsignaled fence.
 	
 	// Create all semaphores & fences!
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateSemaphore(vk->logicalDevice, &semaphore_info, NULL, &vk->imageAvailableSemaphores[i]);	wsVulkanPrint("\"image available?\" semaphore creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result); }
+	{
+		WS_VULKAN_CHECK_RESULT
+		(
+			"\"image available?\" semaphore creation", 
+			vkCreateSemaphore(vk->logicalDevice, &semaphore_info, NULL, &vk->imageAvailableSemaphores[i])
+		);
+	}
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateSemaphore(vk->logicalDevice, &semaphore_info, NULL, &vk->renderFinishSemaphores[i]);	wsVulkanPrint("\"render finished?\" semaphore creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result); }
+	{
+		WS_VULKAN_CHECK_RESULT
+		(
+			"\"render finished?\" semaphore creation", 
+			vkCreateSemaphore(vk->logicalDevice, &semaphore_info, NULL, &vk->renderFinishSemaphores[i])
+		);
+	}
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
-		{ VkResult result = vkCreateFence(vk->logicalDevice, &fence_info, NULL, &vk->inFlightFences[i]);	wsVulkanPrint("\"in flight?\" semaphore creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result); }
+	{
+		WS_VULKAN_CHECK_RESULT
+		(
+			"\"in flight?\" fence", 
+			vkCreateFence(vk->logicalDevice, &fence_info, NULL, &vk->inFlightFences[i])
+		);
+	}
 	
 	return VK_SUCCESS;
 }
@@ -397,45 +442,46 @@ VkResult wsVulkanCreateSyncObjects()
 VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, void* pushConstantBlock, uint32_t img_ndx)
 {
 	// Begin recording to the command buffer!
-	VkCommandBufferBeginInfo begin_info = {};
-	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	begin_info.flags = 0;
-	begin_info.pInheritanceInfo = NULL;
+	VkCommandBufferBeginInfo begin_info	= {};
+	begin_info.sType					= VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags					= 0;
+	begin_info.pInheritanceInfo			= NULL;
 	
-	VkResult result = vkBeginCommandBuffer(*commandbuffer, &begin_info);
-	wsVulkanPrintQuiet("command buffer recording begin", NONE, NONE, NONE, result);
+	vkBeginCommandBuffer(*commandbuffer, &begin_info);
 	
 	// Begin render pass.
-	VkRenderPassBeginInfo renderPass_info = {};
-	renderPass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPass_info.renderPass = vk->renderPass;
-	renderPass_info.framebuffer = vk->swapchain.framebuffers[img_ndx];
-	renderPass_info.renderArea.offset.x = 0;
-	renderPass_info.renderArea.offset.y = 0;
-	renderPass_info.renderArea.extent = vk->swapchain.extent;
+	VkRenderPassBeginInfo renderPass_info	= {};
+	renderPass_info.sType					= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPass_info.renderPass				= vk->renderPass;
+	renderPass_info.framebuffer				= vk->swapchain.framebuffers[img_ndx];
+	renderPass_info.renderArea.offset.x		= 0;
+	renderPass_info.renderArea.offset.y		= 0;
+	renderPass_info.renderArea.extent		= vk->swapchain.extent;
 	
-	VkClearValue clear_color = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-	VkClearValue clear_depth = {{{1.0f, 0}}};
-	VkClearValue clear_values[3] = {clear_color, clear_color, clear_depth};
-	renderPass_info.clearValueCount = 3;
-	renderPass_info.pClearValues = &clear_values[0];
+	VkClearValue clear_color		= {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+	VkClearValue clear_depth 		= {{{1.0f, 0}}};
+	VkClearValue clear_values[3]	= {clear_color, clear_color, clear_depth};
+	renderPass_info.clearValueCount	= 3;
+	renderPass_info.pClearValues	= &clear_values[0];
 	
 	vkCmdBeginRenderPass(*commandbuffer, &renderPass_info, VK_SUBPASS_CONTENTS_INLINE);
 	
 	// Bind graphics pipeline, then specify viewport & scissor states for this pipeline.
 	vkCmdBindPipeline(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
-	VkViewport viewport = {};
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = (float)vk->swapchain.extent.width;
-	viewport.height = (float)vk->swapchain.extent.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
+
+	VkViewport viewport	= {};
+	viewport.x			= 0.0f;
+	viewport.y			= 0.0f;
+	viewport.width		= (float)vk->swapchain.extent.width;
+	viewport.height		= (float)vk->swapchain.extent.height;
+	viewport.minDepth	= 0.0f;
+	viewport.maxDepth	= 1.0f;
 	vkCmdSetViewport(*commandbuffer, 0, 1, &viewport);
-	VkRect2D scissor = {};
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	scissor.extent = vk->swapchain.extent;
+
+	VkRect2D scissor	= {};
+	scissor.offset.x	= 0;
+	scissor.offset.y	= 0;
+	scissor.extent		= vk->swapchain.extent;
 	vkCmdSetScissor(*commandbuffer, 0, 1, &scissor);
 	
 	// Bind mesh information & draw!
@@ -443,18 +489,30 @@ VkResult wsVulkanRecordCommandBuffer(VkCommandBuffer* commandbuffer, void* pushC
 	VkDeviceSize offsets[1]			= {0};
 	vkCmdBindVertexBuffers(*commandbuffer, 0, 1, vertexbuffers, offsets);
 	vkCmdBindIndexBuffer(*commandbuffer, vk->testRenderObject.mesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
-	vkCmdBindDescriptorSets(*commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipelineLayout, 
-								0, 1, &vk->descriptorSets[vk->swapchain.currentFrame], 0, NULL);
-	vkCmdPushConstants(*commandbuffer, vk->pipelineLayout, vk->globalPushConstantRange.stageFlags,
-						vk->globalPushConstantRange.offset, vk->globalPushConstantRange.size, pushConstantBlock);
+	vkCmdBindDescriptorSets
+	(
+		*commandbuffer, 
+		VK_PIPELINE_BIND_POINT_GRAPHICS, 
+		vk->pipelineLayout, 
+		0, 1, 
+		&vk->descriptorSets[vk->swapchain.currentFrame], 
+		0, NULL
+	);
+	vkCmdPushConstants
+	(
+		*commandbuffer,
+		vk->pipelineLayout,
+		vk->globalPushConstantRange.stageFlags,
+		vk->globalPushConstantRange.offset,
+		vk->globalPushConstantRange.size,
+		pushConstantBlock
+	);
 	vkCmdDrawIndexed(*commandbuffer, (uint32_t)vk->testRenderObject.mesh.num_indices, 1, 0, 0, 0);
 	
 	vkCmdEndRenderPass(*commandbuffer);
 	
 	// End command buffer recording.
-	result = vkEndCommandBuffer(*commandbuffer);
-	wsVulkanPrintQuiet("command buffer recording end", NONE, NONE, NONE, result);
-	return result;
+	return vkEndCommandBuffer(*commandbuffer);
 }
 
 VkResult wsVulkanCreateCommandBuffers()
@@ -463,17 +521,17 @@ VkResult wsVulkanCreateCommandBuffers()
 	vk->swapchain.cmdBuffers = malloc(WS_MAX_FRAMES_IN_FLIGHT * sizeof(VkCommandBuffer));
 	
 	// Specify command buffer allocation configuration.
-	VkCommandBufferAllocateInfo alloc_info = {};
-	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	alloc_info.commandPool = vk->cmdPoolGraphics;
-	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	alloc_info.commandBufferCount = (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
+	VkCommandBufferAllocateInfo alloc_info	= {};
+	alloc_info.sType						= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	alloc_info.commandPool					= vk->cmdPoolGraphics;
+	alloc_info.level						= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	alloc_info.commandBufferCount			= (uint32_t)WS_MAX_FRAMES_IN_FLIGHT;
 	
 	// Allocate all command buffers.
 	for(uint8_t i = 0; i < WS_MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		VkResult result = vkAllocateCommandBuffers(vk->logicalDevice, &alloc_info, vk->swapchain.cmdBuffers);
-		wsVulkanPrint("command buffer creation", NONE, (i + 1), WS_MAX_FRAMES_IN_FLIGHT, result);
+		WS_VULKAN_CHECK_RESULT("command buffer allocation", result);
 	}
 	
 	return VK_SUCCESS;
@@ -481,24 +539,21 @@ VkResult wsVulkanCreateCommandBuffers()
 
 VkResult wsVulkanCreateCommandPool()
 {
-	VkCommandPoolCreateInfo graphicspool_info = {};
-	graphicspool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	graphicspool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	graphicspool_info.queueFamilyIndex = vk->queues.graphicsFamilyIndex;
+	VkCommandPoolCreateInfo graphicspool_info	= {};
+	graphicspool_info.sType						= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	graphicspool_info.flags						= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	graphicspool_info.queueFamilyIndex			= vk->queues.graphicsFamilyIndex;
 	
 	VkResult result = vkCreateCommandPool(vk->logicalDevice, &graphicspool_info, NULL, &vk->cmdPoolGraphics);
-	wsVulkanPrint("graphics/presentation command pool creation", NONE, NONE, NONE, result);
-	if(result != VK_SUCCESS)
-		return result;
+	WS_VULKAN_CHECK_RESULT("graphics/presentation command pool creation", result);
 	
-	VkCommandPoolCreateInfo transferpool_info = {};
-	transferpool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	transferpool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	transferpool_info.queueFamilyIndex = vk->queues.transferFamilyIndex;
+	VkCommandPoolCreateInfo transferpool_info	= {};
+	transferpool_info.sType						= VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	transferpool_info.flags						= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	transferpool_info.queueFamilyIndex			= vk->queues.transferFamilyIndex;
 	
 	result = vkCreateCommandPool(vk->logicalDevice, &transferpool_info, NULL, &vk->cmdPoolTransfer);
-	wsVulkanPrint("transfer command pool creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("transfer command pool creation", result);
 }
 
 uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags properties)
@@ -510,10 +565,10 @@ uint32_t wsVulkanFindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags prop
 	{
 		// Make sure that we have found the requested memory type and that its read/write properties match our needs.
 		if((type_filter & (1 << i)) && (memory_properties.memoryTypes[i].propertyFlags & properties) == properties)
-			{ return i; }
+			{return i;}
 	}
 	
-	printf("ERROR: Vulkan memory type not found!\n");
+	printf("ERRR: Vulkan memory type not found!\n");
 	return NONE;
 }
 
@@ -524,9 +579,7 @@ wsRenderObject* wsVulkanCreateRenderObject(const char* meshPath, const char* tex
 		if(!vk->renderObjects[i].isActive)
 		{
 			vk->renderObjects[i].isActive = true;
-			
 			wsTextureCreate(texPath, &vk->renderObjects[i].texture);
-			
 			wsMeshCreate(meshPath, &vk->renderObjects[i].mesh);
 			
 			/* In order to create our initial descriptor set, we need a mesh.  However, we cannot 
@@ -555,37 +608,36 @@ void wsVulkanDestroyRenderObject(wsRenderObject* renderObject)
 VkResult wsVulkanCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits MSAASamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory *image_memory)
 {
 	// Initialize VkImage inside of struct vk.
-	VkImageCreateInfo image_info = {};
-	image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	image_info.imageType = VK_IMAGE_TYPE_2D;
-	image_info.extent.width = width;
-	image_info.extent.height = height;
-	image_info.extent.depth = 1;
-	image_info.mipLevels = mipLevels;
-	image_info.arrayLayers = 1;
-	image_info.format = format;
-	image_info.tiling = tiling;
-	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	image_info.usage = usage;
-	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	image_info.samples = MSAASamples;
-	image_info.flags = 0;	// Optional.
-	VkResult result = vkCreateImage(vk->logicalDevice, &image_info, NULL, image);
-	wsVulkanPrintQuiet("image creation", (uintptr_t)image, NONE, NONE, result);
+	VkImageCreateInfo image_info	= {};
+	image_info.sType				= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	image_info.imageType			= VK_IMAGE_TYPE_2D;
+	image_info.extent.width			= width;
+	image_info.extent.height		= height;
+	image_info.extent.depth			= 1;
+	image_info.mipLevels			= mipLevels;
+	image_info.arrayLayers			= 1;
+	image_info.format				= format;
+	image_info.tiling				= tiling;
+	image_info.initialLayout		= VK_IMAGE_LAYOUT_UNDEFINED;
+	image_info.usage				= usage;
+	image_info.sharingMode			= VK_SHARING_MODE_EXCLUSIVE;
+	image_info.samples				= MSAASamples;
+	image_info.flags				= 0;	// Optional.
+	VkResult result					= vkCreateImage(vk->logicalDevice, &image_info, NULL, image);
+	WS_VULKAN_CHECK_RESULT("image creation", result);
 	
 	// Specify memory requirements for image.
 	VkMemoryRequirements memory_requirements;
 	vkGetImageMemoryRequirements(vk->logicalDevice, *image, &memory_requirements);
 	
-	VkMemoryAllocateInfo alloc_info = {};
-	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	alloc_info.allocationSize = memory_requirements.size;
-	alloc_info.memoryTypeIndex = wsVulkanFindMemoryType(memory_requirements.memoryTypeBits, properties);
-	result = vkAllocateMemory(vk->logicalDevice, &alloc_info, NULL, image_memory);
-	wsVulkanPrintQuiet("image memory allocation", (uintptr_t)image_memory, NONE, NONE, result);
+	VkMemoryAllocateInfo alloc_info	= {};
+	alloc_info.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info.allocationSize		= memory_requirements.size;
+	alloc_info.memoryTypeIndex		= wsVulkanFindMemoryType(memory_requirements.memoryTypeBits, properties);
+	result							= vkAllocateMemory(vk->logicalDevice, &alloc_info, NULL, image_memory);
+	WS_VULKAN_CHECK_RESULT("image memory allocation", result);
 	
-	result = vkBindImageMemory(vk->logicalDevice, *image, *image_memory, 0);
-	return result;
+	return vkBindImageMemory(vk->logicalDevice, *image, *image_memory, 0);
 }
 
 VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
@@ -600,15 +652,19 @@ VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
 	texture->mipLevels = (uint32_t)floor(log2(mfMaxUint32(tex_width, tex_height))) + 1;
 	
 	if(!pixel_data)
-		{ printf("ERROR: Failed to load texture at path \"%s\"!\n", path); }
-	else printf("INFO: Texture at path \"%s\" of dimension %ix%i w/ %i channels successfully loaded!\n", 
-		path, tex_width, tex_height, tex_channels);
+		{printf("ERRR: Failed to load texture at path \"%s\"!\n", path);}
+	else {printf("INFO: Texture at path \"%s\" of dimension %ix%i w/ %i channels successfully loaded!\n", path, tex_width, tex_height, tex_channels);}
 	
 	// Next, store the image data into a host(CPU)-visible buffer for staging.
 	VkBuffer stagingbuffer;
 	VkDeviceMemory stagingbuffer_memory;
-	wsVulkanCreateBuffer(img_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
-		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingbuffer, &stagingbuffer_memory);
+	wsVulkanCreateBuffer
+	(
+		img_size, 
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+		&stagingbuffer, &stagingbuffer_memory
+	);
 	
 	// Copy pixel data into staging buffer & clean up original pixel array.
 	void* data;
@@ -618,10 +674,18 @@ VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
 	stbi_image_free(pixel_data);
 	
 	// Create the image!
-	VkResult result = wsVulkanCreateImage(tex_width, tex_height, texture->mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
-											VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
-											VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &texture->image, &texture->memory);
-	wsVulkanPrint("image memory binding", NONE, NONE, NONE, result);
+	VkResult result = wsVulkanCreateImage
+	(
+		tex_width, tex_height, 
+		texture->mipLevels, 
+		VK_SAMPLE_COUNT_1_BIT, 
+		VK_FORMAT_R8G8B8A8_SRGB, 
+		VK_IMAGE_TILING_OPTIMAL, 
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+		&texture->image, &texture->memory
+	);
+	WS_VULKAN_CHECK_RESULT("image memory binding", result);
 	
 	// Copy our staging buffer to a GPU/shader-suitable VkImage format.
 	wsVulkanTransitionImageLayout(texture->image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture->mipLevels);
@@ -629,7 +693,14 @@ VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
 	if(wsVulkanGenerateMipMaps(texture, VK_FORMAT_R8G8B8A8_SRGB, tex_width, tex_height) != VK_SUCCESS)
 	{
 		texture->mipLevels = 0;	// Setting this here after already transitioning the image layout may cause issues; for now it's fine.
-		wsVulkanTransitionImageLayout(texture->image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture->mipLevels);
+		wsVulkanTransitionImageLayout
+		(
+			texture->image,
+			VK_FORMAT_R8G8B8A8_SRGB,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			texture->mipLevels
+		);
 	}
 	
 	// Clean up!
@@ -641,26 +712,25 @@ VkResult wsVulkanCreateTextureImage(wsTexture* texture, const char* path)
 
 VkResult wsVulkanCreateImageView(VkImage* image, VkImageView* image_view, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mipLevels)
 {
-	VkImageViewCreateInfo view_info = {};
-	view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	view_info.image = *image;
-	view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	view_info.format = format;
+	VkImageViewCreateInfo view_info	= {};
+	view_info.sType					= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	view_info.image					= *image;
+	view_info.viewType				= VK_IMAGE_VIEW_TYPE_2D;
+	view_info.format				= format;
 	// Stick to default color mapping.
 	view_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 	view_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 	view_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 	view_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 	// subresourceRange describes what the image's purpose is, as well as which part of the image we will be accessing.
-	view_info.subresourceRange.aspectMask = aspect_flags;
-	view_info.subresourceRange.baseMipLevel = 0;
-	view_info.subresourceRange.levelCount = mipLevels;
-	view_info.subresourceRange.baseArrayLayer = 0;
-	view_info.subresourceRange.layerCount = 1;
+	view_info.subresourceRange.aspectMask		= aspect_flags;
+	view_info.subresourceRange.baseMipLevel		= 0;
+	view_info.subresourceRange.levelCount		= mipLevels;
+	view_info.subresourceRange.baseArrayLayer	= 0;
+	view_info.subresourceRange.layerCount		= 1;
 	
 	VkResult result = vkCreateImageView(vk->logicalDevice, &view_info, NULL, image_view);
-	wsVulkanPrintQuiet("image view creation", (intptr_t)image_view, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("image view creation", result);
 }
 
 void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout layout_old, VkImageLayout layout_new, uint32_t mipLevels)
@@ -743,7 +813,7 @@ void wsVulkanTransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 	}
 	else
 	{
-		printf("ERROR: Unsupported Vulkan image layout transition!\n");
+		printf("ERRR: Unsupported Vulkan image layout transition!\n");
 		printf("\tOld layout: %i, new layout: %i\n", layout_old, layout_new);
 	}
 	
@@ -778,7 +848,7 @@ VkResult wsVulkanGenerateMipMaps(wsTexture* texture, VkFormat imageFormat, int32
 	
 	if(!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
 	{
-		printf("ERROR: Vulkan texture image format %i does not support linear blitting!\n", imageFormat);
+		printf("ERRR: Vulkan texture image format %i does not support linear blitting!\n", imageFormat);
 		return VK_ERROR_FORMAT_NOT_SUPPORTED;
 	}
 	
@@ -900,8 +970,7 @@ VkResult wsVulkanCreateTextureSampler()
 	sampler_info.maxLod = (float)(vk->testTexture.mipLevels);
 	
 	VkResult result = vkCreateSampler(vk->logicalDevice, &sampler_info, NULL, &vk->texturesampler);
-	wsVulkanPrint("texture sampler creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("texture sampler creation", result);
 }
 
 void wsVulkanCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
@@ -952,17 +1021,17 @@ VkFormat wsVulkanFindSupportedImageFormat(VkFormat* candidates, uint8_t num_cand
 		
 		if(desired_tiling == VK_IMAGE_TILING_LINEAR && has_linear_features)
 		{
-			wsVulkanPrintQuiet("supported linear image format search", format, NONE, NONE, VK_SUCCESS);
+			WS_VULKAN_CHECK_RESULT("supported linear image format search", VK_SUCCESS);
 			return format;
 		}
 		else if(desired_tiling == VK_IMAGE_TILING_OPTIMAL && has_optimal_features)
 		{
-			wsVulkanPrintQuiet("supported optimal image format search", format, NONE, NONE, VK_SUCCESS);
+			WS_VULKAN_CHECK_RESULT("supported optimal image format search", VK_SUCCESS);
 			return format;
 		}
 	}
 	
-	printf("WARNING: Vulkan supported image format search failed; using last format in candidate list %i!\n", format);
+	printf("WARN: Vulkan supported image format search failed; using last format in candidate list %i!\n", format);
 	return format;
 }
 
@@ -1073,7 +1142,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	buffer_info.pQueueFamilyIndices = &vk->queues.uniqueQueueFamilyIndices[0];
 	
 	VkResult result = vkCreateBuffer(vk->logicalDevice, &buffer_info, NULL, buffer);
-	wsVulkanPrintQuiet("buffer creation", (intptr_t)buffer, NONE, NONE, result);
+	WS_VULKAN_CHECK_RESULT("buffer creation", result);
 	
 	// Specify vertex buffer memory requirements.
 	VkMemoryRequirements memory_requirements;
@@ -1087,7 +1156,7 @@ VkResult wsVulkanCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
 	
 	// Allocate and bind buffer memory to appropriate vertex buffer.
 	result = vkAllocateMemory(vk->logicalDevice, &alloc_info, NULL, buffer_memory);
-	wsVulkanPrintQuiet("buffer memory allocation", (intptr_t)buffer_memory, NONE, NONE, result);
+	WS_VULKAN_CHECK_RESULT("buffer memory allocation", result);
 	if(result != VK_SUCCESS)
 		{ return result; }
 	
@@ -1172,10 +1241,9 @@ VkResult wsVulkanCreateUniformBuffers()
 		// vk->uniformBuffersMapped[i] = (void*)malloc(buffer_size);
 		result = vkMapMemory(vk->logicalDevice, vk->uniformBuffersMemory[i], 0, buffer_size, 0, &vk->uniformBuffersMapped[i]);
 		
-		wsVulkanPrintQuiet("uniform buffer creation", NONE, (int32_t)i, (int32_t)WS_MAX_FRAMES_IN_FLIGHT, result);
+		WS_VULKAN_CHECK_RESULT("uniform buffer creation", result);
 	}
 	
-	wsVulkanPrint("uniform buffer creation", NONE, NONE, NONE, result);
 	return result;
 }
 
@@ -1225,8 +1293,7 @@ VkResult wsVulkanCreateDescriptorSetLayout()
 	layout_info.pBindings = &bindings[0];
 	
 	VkResult result = vkCreateDescriptorSetLayout(vk->logicalDevice, &layout_info, NULL, &vk->descriptorSetLayout);
-	wsVulkanPrint("descriptor set layouts creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("descriptor set layouts creation", result);
 }
 
 VkResult wsVulkanCreateDescriptorSets()
@@ -1244,9 +1311,7 @@ VkResult wsVulkanCreateDescriptorSets()
 	alloc_info.pSetLayouts = &layouts[0];
 	
 	VkResult result = vkAllocateDescriptorSets(vk->logicalDevice, &alloc_info, &vk->descriptorSets[0]);
-	wsVulkanPrint("descriptor set allocation", NONE, NONE, NONE, result);
-	if(result != VK_SUCCESS)
-		{return result;}
+	WS_VULKAN_CHECK_RESULT("descriptor set allocation", result);
 	free(layouts);	// Causes crash?  Maybe!
 	
 	for(uint8_t i = 0; i < WS_MAX_DESCRIPTOR_SETS; i++)
@@ -1304,8 +1369,7 @@ VkResult wsVulkanCreateDescriptorPool()
 	pool_info.flags = 0;	// Optional.
 	
 	VkResult result = vkCreateDescriptorPool(vk->logicalDevice, &pool_info, NULL, &vk->descriptorPool);
-	wsVulkanPrint("descriptor pool creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("descriptor set creation", result);
 }
 
 void wsVulkanFramebufferResizeCallback(GLFWwindow* window, int width, int height)
@@ -1330,12 +1394,9 @@ VkResult wsVulkanCreateSwapChainFramebuffers()
 		framebuffer_info.layers = 1;
 		
 		result = vkCreateFramebuffer(vk->logicalDevice, &framebuffer_info, NULL, &vk->swapchain.framebuffers[i]);
-		wsVulkanPrintQuiet("framebuffer creation", NONE, (i + 1), vk->swapchain.imageCount, result);
-		if(result != VK_SUCCESS)
-			break;
+		WS_VULKAN_CHECK_RESULT("framebuffer creation", result);
 	}
 	
-	// printf("INFO: %i/%i Vulkan framebuffers created!\n", vk->swapchain.imageCount, vk->swapchain.imageCount);
 	return result;
 }
 
@@ -1410,8 +1471,7 @@ VkResult wsVulkanCreateRenderPass()
 	
 	// Self-explanatory copypasta code.	
 	VkResult result = vkCreateRenderPass(vk->logicalDevice, &renderPass_info, NULL, &vk->renderPass);
-	wsVulkanPrint("render pass creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("render pass creation", result);
 }
 
 VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID)
@@ -1426,7 +1486,7 @@ VkShaderModule wsVulkanCreateShaderModule(uint8_t shaderID)
 	// Create and return shader module!
 	VkShaderModule module;
 	VkResult result = vkCreateShaderModule(vk->logicalDevice, &createInfo, NULL, &module);
-	wsVulkanPrint("shader module creation", shaderID, NONE, NONE, result);
+	WS_VULKAN_CHECK_RESULT_NO_RETURN("shader module creation", result);
 	return module;
 }
 
@@ -1579,7 +1639,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	pipelinelayout_info.pushConstantRangeCount = 1;
 	pipelinelayout_info.pPushConstantRanges	= &vk->globalPushConstantRange;
 	VkResult result = vkCreatePipelineLayout(vk->logicalDevice, &pipelinelayout_info, NULL, &vk->pipelineLayout);
-	wsVulkanPrint("pipeline layout creation", NONE, NONE, NONE, result);
+	WS_VULKAN_CHECK_RESULT("pipeline layout creation", result);
 	
 	VkGraphicsPipelineCreateInfo pipeline_info = {};
 	pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1606,8 +1666,7 @@ VkResult wsVulkanCreateGraphicsPipeline()
 	vkDestroyShaderModule(vk->logicalDevice, vert_module, NULL);
 	vkDestroyShaderModule(vk->logicalDevice, frag_module, NULL);
 	
-	wsVulkanPrint("graphics pipeline creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("graphics pipeline creation", result);
 }
 
 // Returns number of image views created successfully.
@@ -1627,7 +1686,7 @@ uint32_t wsVulkanCreateSwapChainImageViews()
 	}
 	
 	if(num_created != vk->swapchain.imageCount)
-		{ printf("ERROR: Only %i/%i image views created!\n", num_created, vk->swapchain.imageCount); }
+		{ printf("ERRR: Only %i/%i image views created!\n", num_created, vk->swapchain.imageCount); }
 	// else { printf("INFO: %i/%i Vulkan image views created!\n", num_created, vk->swapchain.imageCount); }
 	
 	return num_created;
@@ -1687,8 +1746,7 @@ VkResult wsVulkanCreateSwapChain()
 	printf("INFO: Creating swap chain with properties: \n\tExtent: %ix%i\n\tSurface format: %i\n\tPresentation mode: %i\n", 
 		vk->swapchain.extent.width, vk->swapchain.extent.height, vk->swapchain.surfaceFormat.format, vk->swapchain.presentMode);
 	
-	wsVulkanPrint("swap chain creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("swap chain creation", result);
 }
 
 void wsVulkanRecreateSwapChain()
@@ -1836,8 +1894,7 @@ void wsVulkanQuerySwapChainSupport()
 VkResult wsVulkanCreateSurface()
 {
 	VkResult result = glfwCreateWindowSurface(vk->instance, wsWindowGetPtr(vk->windowID), NULL, &vk->surface);
-	wsVulkanPrint("surface creation for window", vk->windowID, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("surface creation for window", result);
 }
 
 // Creates a logical device to interface with the physical one.
@@ -1905,8 +1962,7 @@ VkResult wsVulkanCreateLogicalDevice(uint32_t num_validation_layers, const char*
 	// FREE MEMORY!!!
 	free(queue_create_infos);
 	
-	wsVulkanPrint("logical device creation", NONE, NONE, NONE, result);
-	return result;
+	WS_VULKAN_RETURN_RESULT("logical device creation", result);
 }
 
 // Checks if all queue families have been found.
@@ -2031,7 +2087,7 @@ bool wsVulkanPickPhysicalDevice()
 	
 	if(num_GPUs <= 0)
 	{
-		printf("WARNING: Vulkan alleges your system has no GPUs installed...  You should get that looked at.\n");
+		printf("WARN: Vulkan alleges your system has no GPUs installed...  You should get that looked at.\n");
 		return false;
 	}
 	
@@ -2087,7 +2143,7 @@ bool wsVulkanPickPhysicalDevice()
 	}
 	else
 	{
-		printf("ERROR: Failed to find GPUs with proper Vulkan support!\n");
+		printf("ERRR: Failed to find GPUs with proper Vulkan support!\n");
 		return false;
 	}
 	
@@ -2137,7 +2193,7 @@ int32_t wsVulkanRatePhysicalDevice(VkPhysicalDevice* physicalDevice)
 		return NO_SWAPCHAIN_SUPPORT;
 	
 	score += deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 2000 : 0;
-	score += wsVulkanCheckDeviceRayTracingExtensionSupport(physicalDevice) * 1500;
+	score += wsRayTracingCheckDeviceExtensionSupport(physicalDevice) * 1500;
 	score += indices.graphicsFamilyIndex != indices.transferFamilyIndex ? 2000 : 0;	// If these are separate queue families, this WILL increase performance (likely to execute in parallel).
 	score += indices.graphicsFamilyIndex == indices.presentFamilyIndex ? 1000 : 0;	// If these are the same queue family, this could increase performance (unlikely to execute in parallel).
 	score -= deviceFeatures.samplerAnisotropy ? 0 : 500;
@@ -2185,7 +2241,7 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice)
 
 		if(!has_found_extension)
 		{
-			printf("\t\tERROR: REQUIRED device extension \"%s\" is not supported by your GPU!\n", required_extensions[i]);
+			printf("\t\tERRR: REQUIRED device extension \"%s\" is not supported by your GPU!\n", required_extensions[i]);
 			requiredExtensionsSupported = false;
 		}
 	}
@@ -2196,52 +2252,6 @@ bool wsVulkanCheckDeviceExtensionSupport(VkPhysicalDevice* physicalDevice)
 	free(availableExtensions);	// BUG: Maybe a memory issue here?
 
 	return requiredExtensionsSupported;
-}
-
-bool wsVulkanCheckDeviceRayTracingExtensionSupport(VkPhysicalDevice* physicalDevice)
-{
-	VkExtensionProperties* availableExtensions;
-	uint32_t availableExtensionCount = wsVulkanEnumerateDeviceExtentions(physicalDevice, &availableExtensions);
-	
-	uint32_t rayTracingExtensionCount = 3;
-	const char* rayTracingExtensions[] = 
-	{
-		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 
-		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 
-		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
-	};
-	bool rayTracingExtensionsSupported = true;
-	vk->supportsRayTracing = true;
-	
-	printf("\t%i device-specific ray tracing extensions preferred: ", rayTracingExtensionCount);
-	for(int32_t i = 0; i < rayTracingExtensionCount; i++)
-		{ printf("\t\t%s", rayTracingExtensions[i]); }
-	printf("\n");
-	
-	for(uint32_t i = 0; i < rayTracingExtensionCount; i++)
-	{
-		bool hasFoundExtension = false;
-		
-		for(uint32_t j = 0; j < availableExtensionCount; j++)
-		{
-			if(strcmp(rayTracingExtensions[i], availableExtensions[j].extensionName) == 0)
-				{hasFoundExtension = true; break;}
-		}
-
-		if(!hasFoundExtension)
-		{
-			printf("\t\tWARNING: Optional device ray tracing extension \"%s\" is not supported by your GPU!\n", rayTracingExtensions[i]);
-			vk->supportsRayTracing = false;
-			rayTracingExtensionsSupported = false;
-		}
-	}
-	
-	if(rayTracingExtensionsSupported)
-		{printf("\t\tAll device-specific ray tracing extensions are supported by your GPU!\n");}
-	
-	free(availableExtensions);	// Bug: Maybe a memory issue?
-	
-	return rayTracingExtensionsSupported;
 }
 
 VkSampleCountFlagBits wsVulkanGetMaxMSAASampleCount()
@@ -2268,9 +2278,7 @@ VkResult wsVulkanInitDebugMessenger()
 	
 	// Create debug messenger!
 	VkResult result = wsVulkanCreateDebugUtilsMessengerEXT(vk->instance, &createInfo, NULL, &vk->debugMessenger);
-	wsVulkanPrint("debug messenger creation", NONE, NONE, NONE, result);
-	
-	return result;
+	WS_VULKAN_RETURN_RESULT("debug messenger creation", result);
 }
 
 void wsVulkanStopDebugMessenger()
@@ -2307,9 +2315,9 @@ void wsVulkanDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMess
 static VKAPI_ATTR VkBool32 VKAPI_CALL wsVulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msg_severity, VkDebugUtilsMessageTypeFlagsEXT msg_type, const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data)
 {
 	if(msg_severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-		printf("ERROR: ");
+		printf("ERRR: ");
 	else if(msg_severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-		printf("WARNING: ");
+		printf("WARN: ");
 	else if(msg_severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
 		printf("INFO: ");
 	
@@ -2399,7 +2407,7 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* createInfo)
 		
 		if(!extension_found)
 		{
-			printf("\tERROR: GLFW-required Vulkan extension \"%s\" is NOT supported!\n", required_extensions[i]);
+			printf("\tERRR: GLFW-required Vulkan extension \"%s\" is NOT supported!\n", required_extensions[i]);
 			has_all_extensions = false;
 		}
 	}
@@ -2416,7 +2424,7 @@ bool wsVulkanEnableRequiredExtensions(VkInstanceCreateInfo* createInfo)
 	// free(required_extensions);
 	
 	if(!has_all_extensions)
-		{ printf("\tERROR: Not all GLFW-required Vulkan extensions are supported!\n"); }
+		{ printf("\tERRR: Not all GLFW-required Vulkan extensions are supported!\n"); }
 	else
 		{ printf("\tAll GLFW-required Vulkan extensions are supported!\n"); }
 	
@@ -2455,7 +2463,7 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* createInfo)
 		
 		if(!layer_found)
 		{
-			printf("\tERROR: required Vulkan validation layers NOT supported!\n");
+			printf("\tERRR: required Vulkan validation layers NOT supported!\n");
 			return false;
 		}
 	}
@@ -2476,66 +2484,6 @@ bool wsVulkanEnableValidationLayers(VkInstanceCreateInfo* createInfo)
 	
 	printf("\tRequired Vulkan validation layers are supported!\n");
 	return true;
-}
-
-// Print statements for things that return a VkResult.
-void wsVulkanPrint(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result)
-{
-	// If we have neither an ID nor fraction.
-	if(ID == NONE && numerator == NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
-		else printf("INFO: Vulkan %s success!\n", str);
-	}
-	// If we have no ID but do have a fraction.
-	else if(ID == NONE && numerator != NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
-		else printf("INFO: Vulkan %s %i/%i success!\n", str, numerator, denominator);
-	}
-	// If we have an ID but no fraction.
-	else if(ID != NONE && numerator == NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
-		else printf("INFO: Vulkan %s w/ ID %i success!\n", str, ID);
-	}
-	// If we have both an ID & fraction.
-	else if(ID != NONE && numerator != NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
-		else printf("INFO: Vulkan %s %i/%i w/ ID %i success!\n", str, numerator, denominator, ID);
-	}
-}
-void wsVulkanPrintQuiet(const char* str, int32_t ID, int32_t numerator, int32_t denominator, VkResult result)
-{
-	// If we have neither an ID nor fraction.
-	if(ID == NONE && numerator == NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s failed with result code %i!\n", str, result);
-	}
-	// If we have no ID but do have a fraction.
-	else if(ID == NONE && numerator != NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s %i/%i failed with result code %i!\n", str, numerator, denominator, result);
-	}
-	// If we have an ID but no fraction.
-	else if(ID != NONE && numerator == NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s w/ ID %i failed with result code %i!\n", str, ID, result);
-	}
-	// If we have both an ID & fraction.
-	else if(ID != NONE && numerator != NONE)
-	{
-		if(result != VK_SUCCESS)
-			printf("ERROR: Vulkan %s %i/%i w/ ID %i failed with result code %i!\n", str, numerator, denominator, ID, result);
-	}
 }
 
 float wsVulkanGetAspectRatio()

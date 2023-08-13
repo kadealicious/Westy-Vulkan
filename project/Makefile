@@ -7,12 +7,12 @@ HEADDIR = code/src/h
 OBJDIR = code/obj
 CLEANDIR = code\obj
 
-_OBJS = main.o window.o input.o graphics.o mesh.o texture.o shader.o camera.o game.o mafs.o
+_OBJS = main.o window.o input.o graphics.o raytracing.o mesh.o texture.o shader.o camera.o game.o mafs.o
 OBJS = $(patsubst %, $(OBJDIR)/%,$(_OBJS))
 CLEANOBJS = $(patsubst %, $(CLEANDIR)\\%,$(_OBJS))
-_SRCS = main.c window.c input.c graphics.c mesh.c texture.c shader.c camera.c game.c mafs.c
+_SRCS = main.c window.c input.c graphics.c raytracing.c mesh.c texture.c shader.c camera.c game.c mafs.c
 SRCS = $(patsubst %, $(SRCDIR)/%,$(_SRCS))
-_HEADS = stb_image.h window.h input.h graphics.h mesh.h texture.h shader.h camera.h game.h mafs.h
+_HEADS = stb_image.h window.h input.h graphics.h raytracing.h mesh.h texture.h shader.h camera.h game.h mafs.h
 HEADS = $(patsubst %, $(HEADDIR)/%,$(_HEADS))
 
 all: app
@@ -24,6 +24,8 @@ code/obj/window.o: code/src/window.c
 code/obj/input.o: code/src/input.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/graphics.o: code/src/graphics.c
+	$(CC) $(CCFLAGS) -c $^ -o $@
+code/obj/raytracing.o: code/src/raytracing.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
 code/obj/mesh.o: code/src/mesh.c
 	$(CC) $(CCFLAGS) -c $^ -o $@
