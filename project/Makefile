@@ -10,6 +10,7 @@ CLEANDIR = code\obj
 _OBJS = main.o window.o input.o graphics.o raytracing.o mesh.o texture.o shader.o camera.o game.o mafs.o
 OBJS = $(patsubst %, $(OBJDIR)/%,$(_OBJS))
 CLEANOBJS = $(patsubst %, $(CLEANDIR)\\%,$(_OBJS))
+CLEANDEPS = $(patsubst %, $(CLEANDIR)\\%,$(_OBJS))
 _SRCS = main.c window.c input.c graphics.c raytracing.c mesh.c texture.c shader.c camera.c game.c mafs.c
 SRCS = $(patsubst %, $(SRCDIR)/%,$(_SRCS))
 _HEADS = stb_image.h window.h input.h graphics.h raytracing.h mesh.h texture.h shader.h camera.h game.h mafs.h
@@ -48,4 +49,4 @@ app: $(OBJS)
 
 .PHONY: app shaders clean
 clean: 
-	-del $(CLEANOBJS)
+	-del $(CLEANOBJS) $(CLEANDEPS)

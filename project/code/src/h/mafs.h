@@ -2,9 +2,10 @@
 #define MAFS_H_
 
 #include<stdint.h>
+#include<stdbool.h>
 
 
-void printb(unsigned char value);	// Prints in binary!
+void printb(unsigned char value);	// Prints in binary (no newline)!
 
 int mfClampInt(int num, int min, int max);
 int64_t mfClampInt64(int64_t num, int64_t min, int64_t max);

@@ -205,26 +205,30 @@ void wsVulkanInit(wsVulkan* vulkan_data, uint8_t windowID, bool isDebug)
 	wsVulkanCreateSwapChainImageViews();		// Image views describe how we will use, write-to, and read each image.
 	wsVulkanCreateRenderPass();
 	wsVulkanCreateDescriptorSetLayout();
+	
 	vk->testMesh = *wsMeshInit();
+
 	wsVulkanCreateGraphicsPipeline();
 	wsVulkanCreateColorResources();
 	wsVulkanCreateDepthResources();
 	wsVulkanCreateSwapChainFramebuffers();		// Used for interfacing with image view attachments.
 	wsVulkanCreateCommandPool();				// Used for executing commands sent via command buffer.
+
 	vk->testTexture = *wsTextureInit(&vk->logicalDevice);
 	wsVulkanCreateTextureSampler();				// Creates a texture sampler for use with ALL textures!
+
 	vk->testRenderObject = *wsVulkanCreateRenderObject("models/vikingroom/vikingroom.gltf", "models/vikingroom/vikingroom.png");
-	// vk->testRenderObject = *wsVulkanCreateRenderObject("models/avocado/Avocado.gltf", "models/avocado/Avocado_color.png");
 	wsVulkanCreateVertexBuffer(&vk->testMesh);	// Must be done after the pipeline is created.
 	wsVulkanCreateIndexBuffer(&vk->testMesh);	// "" "" "" "" "" "" "" "" "" "" "" "" "" "" 
+
 	wsVulkanCreateUniformBuffers();
 	wsVulkanCreateDescriptorPool();
 	wsVulkanCreateDescriptorSets();
 	wsVulkanCreateCommandBuffers();		// Used for queueing commands for the command pool to execute.
 	wsVulkanCreateSyncObjects();		// Creates semaphores & fences for preventing CPU & GPU sync issues when passing image data around.
 	
-	vk->supportsRayTracing		= wsRayTracingCheckDeviceExtensionSupport(&vk->physicalDevice);
-	if(vk->supportsRayTracing)	{wsRayTracingInit(&vk->rayTracing);}
+	vk->rayTracing.supportsRayTracing		= wsRayTracingCheckDeviceExtensionSupport(&vk->physicalDevice);
+	if(vk->rayTracing.supportsRayTracing)	{wsRayTracingInit(&vk->rayTracing);}
 
 	printf("---END VULKAN INITIALIZATION---\n");
 }
@@ -370,7 +374,6 @@ void wsVulkanTerminate()
 	{
 		wsVulkanDestroyRenderObject(&vk->renderObjects[i]);
 	}
-	// wsVulkanDestroyRenderObject(&vk->testRenderObject);
 	wsTextureDestroy(&vk->testTexture);
 	wsMeshDestroy(&vk->testMesh, &vk->logicalDevice);
 	

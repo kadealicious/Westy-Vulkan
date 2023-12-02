@@ -127,7 +127,7 @@ typedef struct wsVulkan
 	VkFence*		inFlightFences;			// Used to check if image(s) can be processed by the CPU.
 	VkSemaphore*	imageAvailableSemaphores;	// Used to check if GPU has any image(s) available for rendering.
 	VkSemaphore*	renderFinishSemaphores;	// Used to check if GPU has finished rendering available image(s).
-	
+
 	VkBuffer*		uniformBuffers;
 	VkDeviceMemory*	uniformBuffersMemory;
 	void**			uniformBuffersMapped;
@@ -154,7 +154,6 @@ typedef struct wsVulkan
 	wsTexture		testTexture;
 	wsMesh			testMesh;
 	
-	bool			supportsRayTracing;
 	wsRayTracing	rayTracing;
 }
 wsVulkan;
