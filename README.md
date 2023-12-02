@@ -14,9 +14,10 @@ Westy is a Vulkan-based rendering engine written in C.  I hope you enjoy my work
 - Rasterization-based pipeline, raytraced pipeline in-progress.
 - Sample rate shading support to mitigate any aliasing caused by fragment shader artifacting.
 - MSAA support for up to 64 samples.
+- High-speed uniform push constants for shaders.
 
 ### Geometry
-- Embedded .gltf mesh loading.
+- Embedded .gltf/.glb mesh loading.
 
 ### Texturing
 - Mipmapping & dynamic mip LOD control.
