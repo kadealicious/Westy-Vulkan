@@ -1,15 +1,9 @@
-# Westy <img src="https://github.com/kadealicious/Westy-Vulkan/blob/main/project/docs/logo/logo.png" style="width:1.25em; margin:auto auto -0.25em -0.25em;">
+# Westy
 
 Westy is a Vulkan-based rendering engine written in C.  I hope you enjoy my work.  :)
 <br>
 <br>
-Created by:	**Kade Samson**
-<br>
-- Linkedin:		[@kadesamson](https://www.linkedin.com/in/kadesamson/)
-- Github:		[@kadealicious](https://github.com/kadealicious)
-- Instagram:	[@kadesamson](https://www.instagram.com/kadesamson/)
-- Portfolio:	[kadesamson.com](https://www.kadesamson.com)
-- Everything else: [linktr.ee/kadealicious](https://linktr.ee/kadealicious)
+<img src="https://github.com/kadealicious/Westy-Vulkan/blob/main/project/docs/screenshots/viking%20home.png" style="width:50%; margin:auto auto -0.25em -0.25em;">
 
 <br>
 
@@ -29,6 +23,13 @@ Created by:	**Kade Samson**
 - .png, .jpg, .bmp, .tga, & .hdr image format support.
 
 <br>
+
+## Created by Kade Samson
+- Linkedin:		[@kadesamson](https://www.linkedin.com/in/kadesamson/)
+- Github:		[@kadealicious](https://github.com/kadealicious)
+- Instagram:	[@kadesamson](https://www.instagram.com/kadesamson/)
+- Portfolio:	[kadesamson.com](https://www.kadesamson.com)
+- Everything else: [linktr.ee/kadealicious](https://linktr.ee/kadealicious)
 
 ## Libraries Used
 - [Vulkan](https://www.vulkan.org/)
